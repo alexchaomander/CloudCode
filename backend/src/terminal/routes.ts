@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { WebSocket } from '@fastify/websocket';
+import type { SocketStream } from '@fastify/websocket';
+import type WebSocket from 'ws';
 import { requireAuth } from '../auth/middleware.js';
-import { getSession, syncSessionStatus } from '../sessions/service.js';
+import { getSession } from '../sessions/service.js';
 import * as tmux from '../tmux/adapter.js';
 import { validateSession } from '../auth/service.js';
 
@@ -143,15 +144,16 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   // WebSocket at /ws/terminal?sessionId=xxx
-  fastify.get('/ws/terminal', { websocket: true }, async (socket, request) => {
+  fastify.get('/ws/terminal', { websocket: true }, (connection: SocketStream, request) => {
+    const ws = connection.socket;
     let sessionId: string | null = null;
     let tmuxSessionName: string | null = null;
-    let authenticated = false;
 
     // Authenticate via cookie or query param token
     const cookieToken = request.cookies?.['session'];
     const queryToken = (request.query as Record<string, string>)['token'];
     const token = cookieToken ?? queryToken;
+    let authenticated = false;
 
     if (token) {
       const sessionInfo = validateSession(token);
@@ -161,155 +163,175 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     if (!authenticated) {
-      socket.send(JSON.stringify({
+      ws.send(JSON.stringify({
         type: 'session.error',
         message: 'Authentication required',
       }));
-      socket.close(1008, 'Unauthorized');
+      ws.close(1008, 'Unauthorized');
       return;
     }
 
-    // Check if sessionId provided in query
+    // Subscribe to sessionId if provided in query
     const querySessionId = (request.query as Record<string, string>)['sessionId'];
     if (querySessionId) {
       const session = getSession(querySessionId);
       if (session) {
         sessionId = session.id;
         tmuxSessionName = session.tmux_session_name;
-        addConnection(sessionId, socket as unknown as WebSocket);
+        addConnection(sessionId, ws);
         startPolling(sessionId, tmuxSessionName);
 
-        // Send initial output
-        try {
-          const initialOutput = await tmux.capturePane(tmuxSessionName);
-          if (initialOutput) {
-            lastPaneContent.set(sessionId, initialOutput);
-            socket.send(JSON.stringify({
-              type: 'terminal.output',
-              data: initialOutput,
-            }));
-          }
-        } catch {
-          // Ignore initial capture errors
-        }
+        // Send initial output async
+        tmux.capturePane(tmuxSessionName)
+          .then((initialOutput) => {
+            if (initialOutput && sessionId) {
+              lastPaneContent.set(sessionId, initialOutput);
+              ws.send(JSON.stringify({
+                type: 'terminal.output',
+                data: initialOutput,
+              }));
+            }
+          })
+          .catch(() => {
+            // Ignore initial capture errors
+          });
 
-        socket.send(JSON.stringify({
+        ws.send(JSON.stringify({
           type: 'session.status',
           status: session.status,
+        }));
+      } else {
+        ws.send(JSON.stringify({
+          type: 'session.error',
+          message: `Session not found: ${querySessionId}`,
         }));
       }
     }
 
-    socket.on('message', async (rawMessage: Buffer | string) => {
-      try {
-        const message = JSON.parse(rawMessage.toString()) as {
-          type: string;
-          data?: string;
-          cols?: number;
-          rows?: number;
-          sessionId?: string;
-        };
+    ws.on('message', (rawMessage: Buffer | string) => {
+      void (async () => {
+        try {
+          const message = JSON.parse(rawMessage.toString()) as {
+            type: string;
+            data?: string;
+            cols?: number;
+            rows?: number;
+            sessionId?: string;
+          };
 
-        switch (message.type) {
-          case 'subscribe': {
-            if (message.sessionId) {
-              // Unsubscribe from previous session
-              if (sessionId) {
-                removeConnection(sessionId, socket as unknown as WebSocket);
+          switch (message.type) {
+            case 'subscribe': {
+              if (message.sessionId) {
+                // Unsubscribe from previous session
+                if (sessionId) {
+                  removeConnection(sessionId, ws);
+                }
+
+                const session = getSession(message.sessionId);
+                if (!session) {
+                  ws.send(JSON.stringify({
+                    type: 'session.error',
+                    message: `Session not found: ${message.sessionId}`,
+                  }));
+                  return;
+                }
+
+                sessionId = session.id;
+                tmuxSessionName = session.tmux_session_name;
+                addConnection(sessionId, ws);
+                startPolling(sessionId, tmuxSessionName);
+
+                // Send current state
+                try {
+                  const initialOutput = await tmux.capturePane(tmuxSessionName);
+                  if (initialOutput) {
+                    lastPaneContent.set(sessionId, initialOutput);
+                    ws.send(JSON.stringify({
+                      type: 'terminal.output',
+                      data: initialOutput,
+                    }));
+                  }
+                } catch {
+                  // Ignore
+                }
+
+                ws.send(JSON.stringify({
+                  type: 'session.status',
+                  status: session.status,
+                }));
               }
+              break;
+            }
 
-              const session = getSession(message.sessionId);
-              if (!session) {
-                socket.send(JSON.stringify({
+            case 'terminal.input': {
+              if (!sessionId || !tmuxSessionName) {
+                ws.send(JSON.stringify({
                   type: 'session.error',
-                  message: `Session not found: ${message.sessionId}`,
+                  message: 'Not subscribed to a session',
                 }));
                 return;
               }
 
-              sessionId = session.id;
-              tmuxSessionName = session.tmux_session_name;
-              addConnection(sessionId, socket as unknown as WebSocket);
-              startPolling(sessionId, tmuxSessionName);
-
-              // Send current state
-              const initialOutput = await tmux.capturePane(tmuxSessionName);
-              if (initialOutput) {
-                lastPaneContent.set(sessionId, initialOutput);
-                socket.send(JSON.stringify({
-                  type: 'terminal.output',
-                  data: initialOutput,
-                }));
+              if (message.data !== undefined) {
+                await tmux.sendKeys(tmuxSessionName, message.data);
               }
-
-              socket.send(JSON.stringify({
-                type: 'session.status',
-                status: session.status,
-              }));
+              break;
             }
-            break;
-          }
 
-          case 'terminal.input': {
-            if (!sessionId || !tmuxSessionName) {
-              socket.send(JSON.stringify({
+            case 'terminal.resize': {
+              if (!tmuxSessionName) return;
+
+              if (message.cols && message.rows) {
+                await tmux.resizeWindow(tmuxSessionName, message.cols, message.rows);
+              }
+              break;
+            }
+
+            case 'request_refresh': {
+              if (!sessionId || !tmuxSessionName) return;
+
+              try {
+                const content = await tmux.capturePane(tmuxSessionName);
+                lastPaneContent.set(sessionId, content);
+                ws.send(JSON.stringify({
+                  type: 'terminal.output',
+                  data: content,
+                }));
+              } catch {
+                // Ignore
+              }
+              break;
+            }
+
+            default:
+              ws.send(JSON.stringify({
                 type: 'session.error',
-                message: 'Not subscribed to a session',
+                message: `Unknown message type: ${message.type}`,
               }));
-              return;
-            }
-
-            if (message.data !== undefined) {
-              await tmux.sendKeys(tmuxSessionName, message.data);
-            }
-            break;
           }
-
-          case 'terminal.resize': {
-            if (!tmuxSessionName) return;
-
-            if (message.cols && message.rows) {
-              await tmux.resizeWindow(tmuxSessionName, message.cols, message.rows);
-            }
-            break;
-          }
-
-          case 'request_refresh': {
-            if (!sessionId || !tmuxSessionName) return;
-
-            const content = await tmux.capturePane(tmuxSessionName);
-            lastPaneContent.set(sessionId, content);
-            socket.send(JSON.stringify({
-              type: 'terminal.output',
-              data: content,
-            }));
-            break;
-          }
-
-          default:
-            socket.send(JSON.stringify({
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to process message';
+          try {
+            ws.send(JSON.stringify({
               type: 'session.error',
-              message: `Unknown message type: ${message.type}`,
+              message: msg,
             }));
+          } catch {
+            // Socket may be closed
+          }
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to process message';
-        socket.send(JSON.stringify({
-          type: 'session.error',
-          message: msg,
-        }));
+      })();
+    });
+
+    ws.on('close', () => {
+      if (sessionId) {
+        removeConnection(sessionId, ws);
       }
     });
 
-    socket.on('close', () => {
+    ws.on('error', () => {
       if (sessionId) {
-        removeConnection(sessionId, socket as unknown as WebSocket);
-      }
-    });
-
-    socket.on('error', () => {
-      if (sessionId) {
-        removeConnection(sessionId, socket as unknown as WebSocket);
+        removeConnection(sessionId, ws);
       }
     });
   });

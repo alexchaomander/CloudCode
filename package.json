@@ -13,6 +13,7 @@
     "start": "npm run start --workspace=backend"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "concurrently": "^8.2.2"
   }
 }

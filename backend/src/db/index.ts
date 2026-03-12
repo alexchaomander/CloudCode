@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import type BetterSqlite3 from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
 
@@ -10,7 +11,7 @@ if (!existsSync(dbDir)) {
   mkdirSync(dbDir, { recursive: true });
 }
 
-const db = new Database(DATABASE_PATH, {
+const db: BetterSqlite3.Database = new Database(DATABASE_PATH, {
   // verbose: process.env.NODE_ENV === 'development' ? console.log : undefined,
 });
 
