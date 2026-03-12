@@ -250,7 +250,7 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
     return db.prepare(`SELECT s.*, p.name as profile_name, r.label as repo_label FROM sessions s JOIN agent_profiles p ON p.id=s.agent_profile_id JOIN repo_roots r ON r.id=s.repo_root_id WHERE s.archived=0 ORDER BY s.updated_at DESC`).all();
   });
 
-  app.post('/api/v1/sessions', (req, reply) => {
+  app.post('/api/v1/sessions', async (req, reply) => {
     if (!requireAuth(req, reply)) return;
     const parsed = sessionCreateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message });
@@ -271,10 +271,10 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
     const tmuxSessionName = `cloudcode-${publicId}`;
 
     try {
-      tmux.createSession(tmuxSessionName, resolvedWorkdir, profile.command, JSON.parse(profile.args_json));
+      await tmux.createSession(tmuxSessionName, resolvedWorkdir, profile.command, JSON.parse(profile.args_json));
       if (body.startup_prompt) {
-        tmux.sendKeys(tmuxSessionName, body.startup_prompt);
-        tmux.sendEnter(tmuxSessionName);
+        await tmux.sendKeys(tmuxSessionName, body.startup_prompt);
+        await tmux.sendEnter(tmuxSessionName);
       }
     } catch (error) {
       if (error instanceof TmuxError) return reply.code(502).send({ error: error.message });
@@ -318,22 +318,22 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
     return { ok: true };
   });
 
-  function markSessionStopped(publicId: string, hardKill: boolean) {
+  async function markSessionStopped(publicId: string, hardKill: boolean) {
     const session = db.prepare('SELECT * FROM sessions WHERE public_id = ?').get(publicId) as any;
     if (!session) return null;
-    if (hardKill) tmux.killSession(session.tmux_session_name);
-    else tmux.sendCtrlC(session.tmux_session_name);
+    if (hardKill) await tmux.killSession(session.tmux_session_name);
+    else await tmux.sendCtrlC(session.tmux_session_name);
     db.prepare("UPDATE sessions SET status='stopped', stopped_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(session.id);
     db.prepare('INSERT INTO session_snapshots (session_id, snapshot_type, content_text) VALUES (?, ?, ?)').run(session.id, 'system_event', hardKill ? 'Session force-killed' : 'Session interrupted (Ctrl+C)');
     return session;
   }
 
-  app.post('/api/v1/sessions/:id/stop', (req, reply) => {
+  app.post('/api/v1/sessions/:id/stop', async (req, reply) => {
     if (!requireAuth(req, reply)) return;
     const params = idParamSchema.safeParse(req.params);
     if (!params.success) return reply.code(400).send({ error: 'Invalid id' });
     try {
-      const session = markSessionStopped(params.data.id, false);
+      const session = await markSessionStopped(params.data.id, false);
       if (!session) return reply.code(404).send({ error: 'Not found' });
       return { ok: true };
     } catch (error) {
@@ -342,12 +342,12 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
     }
   });
 
-  app.post('/api/v1/sessions/:id/kill', (req, reply) => {
+  app.post('/api/v1/sessions/:id/kill', async (req, reply) => {
     if (!requireAuth(req, reply)) return;
     const params = idParamSchema.safeParse(req.params);
     if (!params.success) return reply.code(400).send({ error: 'Invalid id' });
     try {
-      const session = markSessionStopped(params.data.id, true);
+      const session = await markSessionStopped(params.data.id, true);
       if (!session) return reply.code(404).send({ error: 'Not found' });
       return { ok: true };
     } catch (error) {
@@ -393,8 +393,14 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
     let sessionPublicId = '';
     let lastOutput = '';
 
-    socket.on('message', (raw: Buffer) => {
-      const message = JSON.parse(raw.toString()) as Record<string, any>;
+    socket.on('message', async (raw: Buffer) => {
+      let message: any;
+      try {
+        message = JSON.parse(raw.toString());
+      } catch {
+        socket.send(JSON.stringify({ type: 'session.error', payload: 'Invalid JSON payload' }));
+        return;
+      }
 
       if (message.type === 'subscribe') {
         const row = db.prepare('SELECT public_id, tmux_session_name FROM sessions WHERE public_id = ?').get(message.sessionId) as any;
@@ -402,9 +408,9 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
         sessionName = row.tmux_session_name;
         sessionPublicId = row.public_id;
         if (interval) clearInterval(interval);
-        interval = setInterval(() => {
+        interval = setInterval(async () => {
           try {
-            const output = tmux.capturePane(sessionName);
+            const output = await tmux.capturePane(sessionName);
             if (output !== lastOutput) {
               const delta = output.startsWith(lastOutput) ? output.slice(lastOutput.length) : output;
               lastOutput = output;
@@ -422,23 +428,23 @@ export async function buildApp(overrides?: { dbPath?: string; tmux?: TmuxClient 
 
       try {
         if (message.type === 'terminal.input' && sessionName) {
-          tmux.sendKeys(sessionName, message.payload);
+          await tmux.sendKeys(sessionName, message.payload);
           return;
         }
 
         if (message.type === 'terminal.special' && sessionName) {
-          if (message.key === 'Enter') tmux.sendEnter(sessionName);
-          if (message.key === 'C-c') tmux.sendCtrlC(sessionName);
+          if (message.key === 'Enter') await tmux.sendEnter(sessionName);
+          if (message.key === 'C-c') await tmux.sendCtrlC(sessionName);
           return;
         }
 
         if (message.type === 'terminal.resize' && sessionName) {
-          tmux.resize(sessionName, message.cols, message.rows);
+          await tmux.resize(sessionName, message.cols, message.rows);
           return;
         }
 
         if (message.type === 'request_refresh' && sessionName) {
-          const output = tmux.capturePane(sessionName);
+          const output = await tmux.capturePane(sessionName);
           socket.send(JSON.stringify({ type: 'terminal.output', payload: output }));
           lastOutput = output;
         }

@@ -12,13 +12,13 @@ class FakeTmux implements TmuxClient {
   killed: string[] = [];
   resized: Array<{ cols: number; rows: number }> = [];
 
-  createSession(name: string) { this.created.push(name); }
-  sendKeys() {}
-  sendEnter() {}
-  sendCtrlC(name: string) { this.stopped.push(name); }
-  resize(_name: string, cols: number, rows: number) { this.resized.push({ cols, rows }); }
-  capturePane() { return this.output; }
-  killSession(name: string) { this.killed.push(name); }
+  async createSession(name: string) { this.created.push(name); }
+  async sendKeys() {}
+  async sendEnter() {}
+  async sendCtrlC(name: string) { this.stopped.push(name); }
+  async resize(_name: string, cols: number, rows: number) { this.resized.push({ cols, rows }); }
+  async capturePane() { return this.output; }
+  async killSession(name: string) { this.killed.push(name); }
 }
 
 const apps: Array<{ app: any; dbPath: string }> = [];
