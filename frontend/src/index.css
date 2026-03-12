@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+/* xterm.js container styles */
+.xterm-container {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.xterm-container .xterm {
+  height: 100%;
+  padding: 4px;
+}
+
+.xterm-container .xterm-viewport {
+  overflow-y: auto;
+}
