@@ -214,8 +214,8 @@ export function Profiles() {
 
   const fetchProfiles = async () => {
     try {
-      const data = await apiFetch<{ agentProfiles: AgentProfile[] }>('/api/v1/agent-profiles')
-      setProfiles(data.agentProfiles)
+      const data = await apiFetch<{ agentProfiles: AgentProfile[] }>('/api/v1/profiles')
+      setProfiles(data.profiles)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profiles')
     } finally {
@@ -231,7 +231,7 @@ export function Profiles() {
     setSaving(true)
     setFormError(null)
     try {
-      await apiFetch('/api/v1/agent-profiles', {
+      await apiFetch('/api/v1/profiles', {
         method: 'POST',
         body: JSON.stringify({
           ...data,
@@ -252,7 +252,7 @@ export function Profiles() {
     setSaving(true)
     setFormError(null)
     try {
-      await apiFetch(`/api/v1/agent-profiles/${id}`, {
+      await apiFetch(`/api/v1/profiles/${id}`, {
         method: 'PUT',
         body: JSON.stringify({
           ...data,
@@ -272,7 +272,7 @@ export function Profiles() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete profile "${name}"? This cannot be undone.`)) return
     try {
-      await apiFetch(`/api/v1/agent-profiles/${id}`, { method: 'DELETE' })
+      await apiFetch(`/api/v1/profiles/${id}`, { method: 'DELETE' })
       await fetchProfiles()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete profile')

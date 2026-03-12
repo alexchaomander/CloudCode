@@ -154,6 +154,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     });
   });
 
+  // GET /api/v1/auth/bootstrap-status - login page uses this to redirect to /bootstrap
+  fastify.get('/api/v1/auth/bootstrap-status', async (_request, reply) => {
+    return reply.send({ needsBootstrap: countUsers() === 0 });
+  });
+
   // POST /api/v1/auth/logout
   fastify.post('/api/v1/auth/logout', async (request, reply) => {
     const token = request.cookies?.['session'];

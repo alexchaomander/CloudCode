@@ -33,25 +33,25 @@ export function AuditLog() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
 
   const fetchEntries = useCallback(async (reset = false) => {
-    const currentOffset = reset ? 0 : offset
+    const currentPage = reset ? 1 : page
     if (!reset) setLoadingMore(true)
     else setLoading(true)
 
     try {
-      const data = await apiFetch<{ auditLogs: AuditLogEntry[] }>(
-        `/api/v1/audit-logs?limit=${PAGE_SIZE}&offset=${currentOffset}`
+      const data = await apiFetch<{ entries: AuditLogEntry[]; pagination: { pages: number } }>(
+        `/api/v1/audit?limit=${PAGE_SIZE}&page=${currentPage}`
       )
-      const newEntries = data.auditLogs
+      const newEntries = data.entries
       if (reset) {
         setEntries(newEntries)
-        setOffset(newEntries.length)
+        setPage(2)
       } else {
         setEntries(prev => [...prev, ...newEntries])
-        setOffset(prev => prev + newEntries.length)
+        setPage(prev => prev + 1)
       }
       setHasMore(newEntries.length === PAGE_SIZE)
       setError(null)

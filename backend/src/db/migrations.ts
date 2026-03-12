@@ -115,14 +115,7 @@ function runMigrations(): void {
     `);
 
     // The "big 4" coding agent CLIs, pre-configured and ready to use.
-    //
-    // Claude Code, Gemini CLI, and OpenAI Codex are all persistent interactive
-    // REPLs — they start and stay open, accepting prompts until quit.
-    //
-    // GitHub Copilot CLI (gh copilot) is NOT a persistent REPL; it handles one
-    // request per invocation. We launch a login shell instead so the tmux
-    // session stays open, and set a startup_template so the first invocation
-    // starts automatically on session create.
+    // All four are persistent interactive REPLs that start and stay open.
     const defaultProfiles = [
       {
         id: nanoid(),

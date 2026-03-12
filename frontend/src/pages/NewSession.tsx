@@ -18,12 +18,12 @@ export function NewSession() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch<{ agentProfiles: AgentProfile[] }>('/api/v1/agent-profiles'),
-      apiFetch<{ repoRoots: RepoRoot[] }>('/api/v1/repo-roots'),
+      apiFetch<{ profiles: AgentProfile[] }>('/api/v1/profiles'),
+      apiFetch<{ repos: RepoRoot[] }>('/api/v1/repos'),
     ])
       .then(([profilesRes, reposRes]) => {
-        setProfiles(profilesRes.agentProfiles)
-        setRepos(reposRes.repoRoots)
+        setProfiles(profilesRes.profiles)
+        setRepos(reposRes.repos)
         if (profilesRes.agentProfiles.length > 0) {
           setAgentProfileId(profilesRes.agentProfiles[0].id)
           // Set startup template if available
@@ -71,7 +71,7 @@ export function NewSession() {
       }
       if (repoRootId) body.repoRootId = repoRootId
       if (workdir) body.workdir = workdir
-      if (startupPrompt) body.startupPrompt = startupPrompt
+      if (startupPrompt) body.startup_prompt = startupPrompt
 
       const res = await apiFetch<{ session: { publicId: string } }>('/api/v1/sessions', {
         method: 'POST',

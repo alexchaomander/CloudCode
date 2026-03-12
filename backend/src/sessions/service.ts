@@ -9,6 +9,7 @@ export interface CreateSessionParams {
   agentProfileId: string;
   repoRootId?: string | null;
   workdir?: string | null;
+  startupPrompt?: string | null;
   userId: string;
 }
 
@@ -95,7 +96,7 @@ const SESSION_QUERY = `
 `;
 
 export async function createSession(params: CreateSessionParams): Promise<SessionWithProfile> {
-  const { title, agentProfileId, repoRootId, workdir, userId } = params;
+  const { title, agentProfileId, repoRootId, workdir, startupPrompt, userId } = params;
 
   // Validate agent profile exists
   const profile = db.prepare('SELECT * FROM agent_profiles WHERE id = ?').get(agentProfileId) as AgentProfile | undefined;
@@ -155,6 +156,12 @@ export async function createSession(params: CreateSessionParams): Promise<Sessio
     if (profile.startup_template) {
       await new Promise((resolve) => setTimeout(resolve, 800));
       await tmux.sendKeys(tmuxSessionName, profile.startup_template + '\n');
+    }
+
+    // Send per-session startup prompt if provided (sent after profile template)
+    if (startupPrompt) {
+      await new Promise((resolve) => setTimeout(resolve, profile.startup_template ? 400 : 800));
+      await tmux.sendKeys(tmuxSessionName, startupPrompt + '\n');
     }
 
     // Update status to running

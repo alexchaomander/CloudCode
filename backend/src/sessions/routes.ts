@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth/middleware.js';
+import { db } from '../db/index.js';
+import * as tmux from '../tmux/adapter.js';
 import {
   createSession,
   stopSession,
@@ -9,12 +12,14 @@ import {
   getSession,
   listSessions,
 } from './service.js';
+import type { SessionSnapshot } from '../db/schema.js';
 
 const sessionCreateSchema = z.object({
   title: z.string().min(1).max(256),
   agent_profile_id: z.string().min(1),
   repo_root_id: z.string().nullable().optional(),
   workdir: z.string().nullable().optional(),
+  startup_prompt: z.string().nullable().optional(),
 });
 
 const sessionRoutes: FastifyPluginAsync = async (fastify) => {
@@ -63,6 +68,7 @@ const sessionRoutes: FastifyPluginAsync = async (fastify) => {
         agentProfileId: data.agent_profile_id,
         repoRootId: data.repo_root_id ?? null,
         workdir: data.workdir ?? null,
+        startupPrompt: data.startup_prompt ?? null,
         userId: request.userId!,
       });
 
@@ -137,6 +143,43 @@ const sessionRoutes: FastifyPluginAsync = async (fastify) => {
       const message = err instanceof Error ? err.message : 'Failed to archive session';
       return reply.status(400).send({ error: 'Bad Request', message });
     }
+  });
+
+  // GET /api/v1/sessions/:id/snapshots
+  fastify.get('/api/v1/sessions/:id/snapshots', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    if (!getSession(id)) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
+    }
+    const snapshots = db.prepare(
+      'SELECT * FROM session_snapshots WHERE session_id = ? ORDER BY created_at DESC'
+    ).all(id) as SessionSnapshot[];
+    return reply.send({ snapshots });
+  });
+
+  // POST /api/v1/sessions/:id/snapshots - capture current pane content
+  fastify.post('/api/v1/sessions/:id/snapshots', { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const session = getSession(id);
+    if (!session) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
+    }
+
+    let content = '';
+    try {
+      content = await tmux.capturePane(session.tmux_session_name);
+    } catch {
+      // Session may be stopped; snapshot whatever we have
+    }
+
+    const snapshotId = nanoid();
+    const now = new Date().toISOString();
+    db.prepare(
+      'INSERT INTO session_snapshots (id, session_id, snapshot_type, content_text, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(snapshotId, id, 'manual', content, now);
+
+    const snapshot = db.prepare('SELECT * FROM session_snapshots WHERE id = ?').get(snapshotId) as SessionSnapshot;
+    return reply.status(201).send({ snapshot });
   });
 };
 
