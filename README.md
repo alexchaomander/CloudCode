@@ -1,39 +1,28 @@
 # CloudCode
 
-A self-hosted, mobile-first web application for managing local CLI-based coding agents (Claude Code, Gemini CLI, Codex, etc.) running on your workstation — accessible securely from your phone over Tailscale.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org)
 
-## What It Does
+**A self-hosted, mobile-first web interface for managing local CLI-based coding agents.**
 
-- **Session dashboard** — view and manage multiple long-running coding agent sessions
-- **Live terminal** — interact with agent processes directly from your phone browser
-- **tmux-backed** — sessions persist through browser disconnects and phone sleep
-- **Secure access** — Tailscale network + app password authentication
-- **Agent profiles** — pre-configured launch profiles for popular coding CLIs
-- **Audit trail** — logs all sensitive actions
+Run Claude Code, Gemini CLI, Codex, and other coding agents on your workstation — then control them from your phone over a private Tailscale network. Sessions are tmux-backed and survive browser disconnects and phone sleep.
 
-## Quick Start
+---
 
-```bash
-# Install dependencies
-npm install
+## Features
 
-# Configure environment
-cp .env.example .env
-# Edit .env and set SESSION_SECRET at minimum
+- **Live terminal** — interact with agent processes from any browser, including mobile
+- **Durable sessions** — tmux-backed sessions persist independently of your browser connection
+- **Multiple agents** — manage many concurrent agent sessions from a single dashboard
+- **Mobile-first UI** — designed for phone portrait mode with thumb-friendly controls
+- **Secure by default** — Tailscale network layer + app password authentication
+- **Agent profiles** — pre-configured profiles for popular coding CLIs, fully editable
+- **Audit trail** — all sensitive actions logged with actor, target, and timestamp
 
-# Run database migrations + seed profiles
-npm run migrate
+---
 
-# Build frontend
-cd frontend && npm run build && cd ..
-
-# Start server
-npm start
-```
-
-Then open `http://localhost:3000/bootstrap` to create your admin account.
-
-## Architecture
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -43,7 +32,7 @@ Then open `http://localhost:3000/bootstrap` to create your admin account.
                    │ HTTPS / WebSocket
 ┌──────────────────▼──────────────────────────┐
 │              CloudCode Server                │
-│   React Frontend + Fastify Backend           │
+│   React Frontend  +  Fastify Backend         │
 │                                             │
 │  ┌─────────────┐  ┌──────────────────────┐  │
 │  │   REST API  │  │  WebSocket Terminal  │  │
@@ -62,20 +51,55 @@ Then open `http://localhost:3000/bootstrap` to create your admin account.
 └─────────────────────────────────────────────┘
 ```
 
-## Stack
+CloudCode is **orchestration**, not a remote desktop. tmux is the durability layer — sessions live on your machine, CloudCode just provides the interface.
 
-**Backend:** Node.js 22 · TypeScript · Fastify · SQLite (better-sqlite3) · argon2 · WebSockets
+---
 
-**Frontend:** React 18 · TypeScript · Vite · Tailwind CSS · xterm.js
+## Quick Start
 
-**Runtime:** tmux · systemd
+**Prerequisites:** Node.js 22+, tmux, at least one coding agent CLI in PATH.
 
-## Documentation
+```bash
+# 1. Clone
+git clone https://github.com/alexchaomander/CloudCode.git
+cd CloudCode
 
-- [Installation Guide](docs/install.md)
-- [Tailscale Setup](docs/tailscale.md)
+# 2. Install dependencies
+npm install
 
-## Supported Agent Profiles (pre-seeded)
+# 3. Configure
+cp .env.example .env
+# Edit .env — set SESSION_SECRET to a long random string:
+#   openssl rand -hex 64
+
+# 4. Migrate database + seed agent profiles
+npm run migrate
+
+# 5. Build frontend
+npm run build
+
+# 6. Start
+npm start
+```
+
+Open `http://localhost:3000/bootstrap` to create your admin account, then log in at `/login`.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Node.js 22 · TypeScript · Fastify · better-sqlite3 |
+| Auth | argon2 · session cookies |
+| Terminal | WebSocket · tmux pane capture |
+| Frontend | React 18 · TypeScript · Vite · Tailwind CSS |
+| Terminal UI | xterm.js |
+| Runtime | tmux · systemd |
+
+---
+
+## Pre-Seeded Agent Profiles
 
 | Agent | Command |
 |-------|---------|
@@ -84,16 +108,48 @@ Then open `http://localhost:3000/bootstrap` to create your admin account.
 | GitHub Copilot CLI | `gh copilot` |
 | Codex | `codex` |
 
-Profiles are fully editable through the UI.
+Profiles are fully editable through the UI. You can add any CLI tool.
+
+---
 
 ## Security Model
 
-1. **Network** — only accessible via Tailscale / localhost
-2. **Tailscale Identity** — validates `X-Tailscale-User` header against allowed list
-3. **App Auth** — username + password (argon2 hashed)
-4. **Controlled Execution** — sessions launched only from approved agent profiles
-5. **Audit Logs** — all sensitive actions recorded
+CloudCode executes local commands, so it has multiple security layers:
+
+1. **Network** — only listens on Tailscale IP or localhost; never publicly exposed
+2. **Tailscale Identity** — optionally validates `X-Tailscale-User` header to restrict access to approved tailnet identities
+3. **Application auth** — username + password (argon2id hashed); 30-day session cookies
+4. **Controlled execution** — sessions launched only from pre-approved agent profiles
+5. **Path validation** — working directories restricted to registered repo roots; symlink escapes rejected
+6. **Audit logs** — every sensitive action recorded with actor, target, and metadata
+
+See [docs/tailscale.md](docs/tailscale.md) for the recommended network setup.
+
+---
+
+## Documentation
+
+- [Installation Guide](docs/install.md) — full setup, systemd service, troubleshooting
+- [Tailscale Setup](docs/tailscale.md) — secure remote access from your phone
+
+---
+
+## Supported Platforms
+
+| Platform | Status |
+|----------|--------|
+| Linux | Primary |
+| macOS | Supported |
+| Windows | Not supported (tmux dependency) |
+
+---
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
 
 ## License
 
-MIT
+[MIT](LICENSE) — © 2025 CloudCode Contributors
