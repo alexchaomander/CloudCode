@@ -1,6 +1,25 @@
 {
   "name": "cloudcode",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "description": "Self-hosted, mobile-first web interface for managing local CLI-based coding agents over Tailscale",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexchaomander/CloudCode.git"
+  },
+  "homepage": "https://github.com/alexchaomander/CloudCode#readme",
+  "bugs": {
+    "url": "https://github.com/alexchaomander/CloudCode/issues"
+  },
+  "keywords": [
+    "coding-agent",
+    "claude-code",
+    "tmux",
+    "tailscale",
+    "self-hosted",
+    "terminal",
+    "mobile"
+  ],
   "private": true,
   "workspaces": [
     "backend",

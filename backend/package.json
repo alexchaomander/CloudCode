@@ -1,6 +1,8 @@
 {
   "name": "cloudcode-backend",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "description": "CloudCode backend — Fastify API server with tmux session management and WebSocket terminal",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

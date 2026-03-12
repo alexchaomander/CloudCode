@@ -1,6 +1,8 @@
 {
   "name": "cloudcode-frontend",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "description": "CloudCode frontend — mobile-first React UI for coding agent session management",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
