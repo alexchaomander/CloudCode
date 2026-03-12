@@ -130,72 +130,79 @@ CloudCode launches `codex` in the session's working directory. The interactive a
 ## GitHub Copilot CLI
 
 **Vendor:** GitHub / Microsoft
-**Command:** `gh copilot`
-**Session type:** Per-invocation (not a persistent REPL)
+**Command:** `copilot`
+**Session type:** Persistent interactive REPL
 
-GitHub Copilot CLI is invoked per request, unlike the other three agents. CloudCode handles this by launching a **login shell** (`bash -l`) as the session process, then automatically running `gh copilot suggest` as the first command via the profile's startup template. After the suggestion flow completes, the shell remains open — you can run additional `gh copilot suggest` or `gh copilot explain` commands directly.
+> **Note:** The old `gh copilot` extension was deprecated in October 2025 and has been retired. The current GitHub Copilot CLI is a standalone tool installed separately.
+
+GitHub Copilot CLI is a full agentic assistant that runs directly in your terminal. It supports multi-turn conversations, slash commands (`/plan`, `/model`, `/fleet`, `/diff`, `/resume`), autopilot mode, and session persistence. It is a persistent REPL just like Claude Code, Gemini CLI, and OpenAI Codex.
 
 ### Install
 
-GitHub Copilot CLI is a `gh` extension. First install the GitHub CLI:
-
-**Linux:**
+**Via npm (recommended — consistent with other CLIs in this list):**
 
 ```bash
-# Debian/Ubuntu
-sudo apt install gh
-
-# Fedora/RHEL
-sudo dnf install gh
-
-# Or via official script:
-curl -sS https://webi.sh/gh | sh
+npm install -g @github/copilot
 ```
 
-**macOS:**
+**Via install script (macOS/Linux):**
 
 ```bash
-brew install gh
+curl -fsSL https://gh.io/copilot-install | bash
 ```
 
-Then install the Copilot extension:
+**Via Homebrew (macOS/Linux):**
 
 ```bash
-gh extension install github/gh-copilot
+brew install copilot-cli
 ```
 
 Verify:
 
 ```bash
-gh copilot --version
+copilot --version
 ```
 
 ### Authenticate
 
-```bash
-gh auth login
-# Follow the prompts to authenticate with your GitHub account.
-# Choose GitHub.com > HTTPS > browser login.
-```
+**Option A — Interactive login (recommended):**
 
-Verify authentication:
+On first launch, run `copilot` and use the `/login` slash command:
 
 ```bash
-gh auth status
+copilot
+# At the prompt, type:
+/login
+# Follow the browser flow to authenticate with your GitHub account.
 ```
 
-### Key commands
+**Option B — Personal access token:**
+
+Create a fine-grained GitHub personal access token with **Copilot Requests** permission, then set it in your environment:
+
+```bash
+export COPILOT_GITHUB_TOKEN=github_pat_...
+# Fallbacks: GH_TOKEN, GITHUB_TOKEN (checked in that order)
+# Add to ~/.bashrc or ~/.zshrc to persist.
+```
+
+### Key slash commands
 
 | Command | What it does |
 |---------|-------------|
-| `gh copilot suggest` | Interactively suggests a shell command for a task you describe |
-| `gh copilot suggest "list files by size"` | Non-interactively suggests a command |
-| `gh copilot explain "tar -xzf file.tgz"` | Explains what a command does |
-| `gh copilot explain` | Interactively prompts for a command to explain |
+| `/plan` | Build a structured implementation plan before writing code |
+| `/model` | Switch between available AI models |
+| `/fleet` | Run the same task across parallel subagents |
+| `/diff` | Review changes before applying them |
+| `/resume` | Resume a previous session with saved context |
+| `/mcp` | Connect GitHub-native MCP integrations |
+| `/login` | Authenticate with your GitHub account |
+
+Press **Shift+Tab** to cycle between default, plan, and autopilot modes.
 
 ### How it works in CloudCode
 
-When you create a GitHub Copilot CLI session, CloudCode launches `bash -l` and immediately sends `gh copilot suggest` via the startup template. You'll see the "What would you like me to help with?" prompt right away. After each suggestion you can run it, revise it, or run another `gh copilot suggest`.
+CloudCode launches `copilot` in the session's working directory. The interactive REPL starts immediately — send prompts, use slash commands, and the session persists in tmux through browser disconnects and phone sleep. Use `/resume` within a session to pick up a previous Copilot conversation.
 
 ---
 
@@ -203,10 +210,11 @@ When you create a GitHub Copilot CLI session, CloudCode launches `bash -l` and i
 
 | | Claude Code | Gemini CLI | OpenAI Codex | GitHub Copilot CLI |
 |-|-------------|------------|--------------|-------------------|
-| **Session type** | Persistent REPL | Persistent REPL | Persistent REPL | Per-invocation (bash shell) |
-| **Auth** | Anthropic account / API key | Google account / API key | OpenAI API key | GitHub account (`gh auth`) |
-| **Install** | `npm i -g @anthropic-ai/claude-code` | `npm i -g @google/gemini-cli` | `npm i -g @openai/codex` | `gh extension install github/gh-copilot` |
-| **Best for** | Long coding tasks, multi-file edits | Chat + code generation | Autonomous coding tasks | Quick shell command suggestions |
+| **Session type** | Persistent REPL | Persistent REPL | Persistent REPL | Persistent REPL |
+| **Command** | `claude` | `gemini` | `codex` | `copilot` |
+| **Auth** | Anthropic account / API key | Google account / API key | `OPENAI_API_KEY` | GitHub account / `COPILOT_GITHUB_TOKEN` |
+| **Install** | `npm i -g @anthropic-ai/claude-code` | `npm i -g @google/gemini-cli` | `npm i -g @openai/codex` | `npm i -g @github/copilot` |
+| **Plan mode** | Yes | No | No | Yes (`/plan`, Shift+Tab) |
 | **Works offline** | No | No | No | No (requires API/auth) |
 
 ---
@@ -222,7 +230,7 @@ CloudCode runs agents as the same user as the server process. Ensure the CLI is 
 sudo -u your-user which claude
 sudo -u your-user which gemini
 sudo -u your-user which codex
-sudo -u your-user which gh
+sudo -u your-user which copilot
 ```
 
 If installed via `npm install -g`, ensure npm's global bin directory is in PATH. Add to `~/.bashrc` or `~/.profile`:
@@ -231,14 +239,12 @@ If installed via `npm install -g`, ensure npm's global bin directory is in PATH.
 export PATH="$PATH:$(npm bin -g)"
 ```
 
-For GitHub Copilot, CloudCode launches `bash -l` (login shell) which sources `~/.profile` and `~/.bash_profile`, so the PATH should be picked up automatically.
-
 ### Authentication expires
 
 - **Claude Code:** Re-run `claude` to refresh OAuth, or rotate the `ANTHROPIC_API_KEY`.
 - **Gemini CLI:** Re-run `gemini` to refresh Google OAuth.
 - **OpenAI Codex:** Rotate `OPENAI_API_KEY` in your environment.
-- **GitHub Copilot CLI:** Run `gh auth login` again if `gh auth status` reports expired credentials.
+- **GitHub Copilot CLI:** Re-run `/login` inside `copilot`, or rotate `COPILOT_GITHUB_TOKEN`.
 
 ### Session starts but agent exits immediately
 
@@ -246,5 +252,5 @@ Check if the API key or credentials are missing. Run the agent CLI manually in t
 
 ```bash
 cd /path/to/your/repo
-claude   # or gemini, codex, gh copilot suggest
+claude   # or: gemini, codex, copilot
 ```

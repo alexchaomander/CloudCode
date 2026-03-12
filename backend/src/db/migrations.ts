@@ -165,15 +165,14 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'GitHub Copilot CLI',
         slug: 'github-copilot-cli',
-        // `gh copilot` is invoked per-request, not a persistent REPL.
-        // We launch a login shell so the tmux session stays open, then
-        // immediately run `gh copilot suggest` via startup_template so the
-        // first prompt appears on session create. The user can run further
-        // `gh copilot suggest` or `gh copilot explain` commands in the shell.
-        // Auth: run `gh auth login` once on the workstation.
-        command: 'bash',
-        args: ['-l'] as string[],
-        startup_template: 'gh copilot suggest' as string | null,
+        // The new standalone GitHub Copilot CLI (npm install -g @github/copilot)
+        // is a persistent interactive REPL — run `copilot` to start a session.
+        // The old `gh copilot` extension was deprecated October 2025.
+        // Auth: run `/login` on first launch, or set COPILOT_GITHUB_TOKEN /
+        // GH_TOKEN / GITHUB_TOKEN in the environment.
+        command: 'copilot',
+        args: [] as string[],
+        startup_template: null as string | null,
         stop_method: 'ctrl_c',
         supports_interactive_input: 1,
       },

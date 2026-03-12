@@ -103,14 +103,14 @@ Open `http://localhost:3000/bootstrap` to create your admin account, then log in
 
 CloudCode ships with pre-configured profiles for the four major coding agent CLIs:
 
-| Agent | Vendor | Session type | Auth |
-|-------|--------|--------------|------|
-| [Claude Code](docs/agents.md#claude-code) | Anthropic | Persistent REPL | Anthropic account / API key |
-| [Gemini CLI](docs/agents.md#gemini-cli) | Google | Persistent REPL | Google account / API key |
-| [OpenAI Codex](docs/agents.md#openai-codex) | OpenAI | Persistent REPL | `OPENAI_API_KEY` |
-| [GitHub Copilot CLI](docs/agents.md#github-copilot-cli) | GitHub | Shell + per-invocation | `gh auth login` |
+| Agent | Vendor | Command | Auth |
+|-------|--------|---------|------|
+| [Claude Code](docs/agents.md#claude-code) | Anthropic | `claude` | Anthropic account / `ANTHROPIC_API_KEY` |
+| [Gemini CLI](docs/agents.md#gemini-cli) | Google | `gemini` | Google account / `GEMINI_API_KEY` |
+| [OpenAI Codex](docs/agents.md#openai-codex) | OpenAI | `codex` | `OPENAI_API_KEY` |
+| [GitHub Copilot CLI](docs/agents.md#github-copilot-cli) | GitHub | `copilot` | GitHub account / `COPILOT_GITHUB_TOKEN` |
 
-Profiles are fully editable through the UI, and you can add any CLI tool as a custom profile. See **[docs/agents.md](docs/agents.md)** for setup instructions.
+All four are persistent interactive REPLs — sessions stay open in tmux across browser disconnects. Profiles are fully editable and you can add any CLI tool. See **[docs/agents.md](docs/agents.md)** for setup instructions.
 
 ---
 
