@@ -99,16 +99,18 @@ Open `http://localhost:3000/bootstrap` to create your admin account, then log in
 
 ---
 
-## Pre-Seeded Agent Profiles
+## Supported Agent CLIs
 
-| Agent | Command |
-|-------|---------|
-| Claude Code | `claude` |
-| Gemini CLI | `gemini` |
-| GitHub Copilot CLI | `gh copilot` |
-| Codex | `codex` |
+CloudCode ships with pre-configured profiles for the four major coding agent CLIs:
 
-Profiles are fully editable through the UI. You can add any CLI tool.
+| Agent | Vendor | Session type | Auth |
+|-------|--------|--------------|------|
+| [Claude Code](docs/agents.md#claude-code) | Anthropic | Persistent REPL | Anthropic account / API key |
+| [Gemini CLI](docs/agents.md#gemini-cli) | Google | Persistent REPL | Google account / API key |
+| [OpenAI Codex](docs/agents.md#openai-codex) | OpenAI | Persistent REPL | `OPENAI_API_KEY` |
+| [GitHub Copilot CLI](docs/agents.md#github-copilot-cli) | GitHub | Shell + per-invocation | `gh auth login` |
+
+Profiles are fully editable through the UI, and you can add any CLI tool as a custom profile. See **[docs/agents.md](docs/agents.md)** for setup instructions.
 
 ---
 
@@ -130,6 +132,7 @@ See [docs/tailscale.md](docs/tailscale.md) for the recommended network setup.
 ## Documentation
 
 - [Installation Guide](docs/install.md) — full setup, systemd service, troubleshooting
+- [Agent CLI Setup](docs/agents.md) — install and authenticate Claude Code, Gemini CLI, OpenAI Codex, GitHub Copilot CLI
 - [Tailscale Setup](docs/tailscale.md) — secure remote access from your phone
 
 ---

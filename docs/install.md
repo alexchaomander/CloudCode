@@ -131,9 +131,12 @@ Test that your agent CLIs are in PATH:
 which claude   # Claude Code
 which gemini   # Gemini CLI
 which codex    # OpenAI Codex
+which gh       # GitHub Copilot CLI (gh extension install github/gh-copilot)
 ```
 
 CloudCode will launch these as subprocess commands within tmux sessions.
+
+For full installation and authentication instructions for each agent, see **[docs/agents.md](agents.md)**.
 
 ---
 

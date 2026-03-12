@@ -110,17 +110,30 @@ function runMigrations(): void {
     console.log('Seeding default agent profiles...');
 
     const insertProfile = db.prepare(`
-      INSERT INTO agent_profiles (id, name, slug, command, args_json, env_json, stop_method, supports_interactive_input)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agent_profiles (id, name, slug, command, args_json, env_json, startup_template, stop_method, supports_interactive_input)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    // The "big 4" coding agent CLIs, pre-configured and ready to use.
+    //
+    // Claude Code, Gemini CLI, and OpenAI Codex are all persistent interactive
+    // REPLs — they start and stay open, accepting prompts until quit.
+    //
+    // GitHub Copilot CLI (gh copilot) is NOT a persistent REPL; it handles one
+    // request per invocation. We launch a login shell instead so the tmux
+    // session stays open, and set a startup_template so the first invocation
+    // starts automatically on session create.
     const defaultProfiles = [
       {
         id: nanoid(),
         name: 'Claude Code',
         slug: 'claude-code',
+        // `claude` starts an interactive REPL in the current directory.
+        // Auth: run `claude` once manually and complete browser OAuth, or set
+        // ANTHROPIC_API_KEY in the environment.
         command: 'claude',
-        args: [],
+        args: [] as string[],
+        startup_template: null as string | null,
         stop_method: 'ctrl_c',
         supports_interactive_input: 1,
       },
@@ -128,8 +141,23 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'Gemini CLI',
         slug: 'gemini-cli',
+        // `gemini` starts an interactive chat session.
+        // Auth: run `gemini` once and complete Google OAuth, or set GEMINI_API_KEY.
         command: 'gemini',
-        args: [],
+        args: [] as string[],
+        startup_template: null as string | null,
+        stop_method: 'ctrl_c',
+        supports_interactive_input: 1,
+      },
+      {
+        id: nanoid(),
+        name: 'OpenAI Codex',
+        slug: 'openai-codex',
+        // `codex` starts an interactive coding agent session.
+        // Auth: set OPENAI_API_KEY in the environment.
+        command: 'codex',
+        args: [] as string[],
+        startup_template: null as string | null,
         stop_method: 'ctrl_c',
         supports_interactive_input: 1,
       },
@@ -137,17 +165,15 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'GitHub Copilot CLI',
         slug: 'github-copilot-cli',
-        command: 'gh',
-        args: ['copilot'],
-        stop_method: 'ctrl_c',
-        supports_interactive_input: 1,
-      },
-      {
-        id: nanoid(),
-        name: 'Codex',
-        slug: 'codex',
-        command: 'codex',
-        args: [],
+        // `gh copilot` is invoked per-request, not a persistent REPL.
+        // We launch a login shell so the tmux session stays open, then
+        // immediately run `gh copilot suggest` via startup_template so the
+        // first prompt appears on session create. The user can run further
+        // `gh copilot suggest` or `gh copilot explain` commands in the shell.
+        // Auth: run `gh auth login` once on the workstation.
+        command: 'bash',
+        args: ['-l'] as string[],
+        startup_template: 'gh copilot suggest' as string | null,
         stop_method: 'ctrl_c',
         supports_interactive_input: 1,
       },
@@ -162,6 +188,7 @@ function runMigrations(): void {
           profile.command,
           JSON.stringify(profile.args),
           '{}',
+          profile.startup_template,
           profile.stop_method,
           profile.supports_interactive_input
         );

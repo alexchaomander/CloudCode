@@ -148,6 +148,15 @@ export async function createSession(params: CreateSessionParams): Promise<Sessio
       Object.keys(env).length > 0 ? env : undefined
     );
 
+    // If the profile has a startup_template, send it as the first input after
+    // a short delay to allow the process to initialise. This is used for CLIs
+    // that are not persistent REPLs (e.g. GitHub Copilot CLI running inside a
+    // login shell) so the first prompt appears automatically on session create.
+    if (profile.startup_template) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await tmux.sendKeys(tmuxSessionName, profile.startup_template + '\n');
+    }
+
     // Update status to running
     db.prepare(`
       UPDATE sessions SET status = 'running', started_at = ?, updated_at = ? WHERE id = ?
