@@ -1,0 +1,17 @@
+:root { font-family: Inter, ui-sans-serif, system-ui; color: #111827; }
+body { margin: 0; background: #f3f4f6; }
+.container { max-width: 980px; margin: 0 auto; padding: 16px; }
+.topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; }
+.card { background: white; border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+button { border: 0; padding: 8px 12px; border-radius: 8px; background: #2563eb; color: white; cursor: pointer; }
+button.danger { background: #b91c1c; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+input,select,textarea { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #d1d5db; margin-top: 6px; margin-bottom: 8px; box-sizing: border-box; }
+a { color: #2563eb; text-decoration: none; }
+.row { display:flex; gap:8px; align-items:center; }
+.keyboard-row { margin-top: 8px; overflow-x: auto; padding-bottom: 2px; }
+.snapshot { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; margin-top: 8px; }
+.status-running, .status-connected { color: #047857; font-weight: 600; }
+.status-stopped, .status-disconnected { color: #b45309; font-weight: 600; }
+.status-connecting { color: #1d4ed8; font-weight: 600; }
+.status-error { color: #b91c1c; font-weight: 600; }

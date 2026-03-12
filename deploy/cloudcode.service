@@ -1,0 +1,19 @@
+[Unit]
+Description=CloudCode Backend
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/cloudcode
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=HOST=127.0.0.1
+Environment=DATABASE_PATH=/opt/cloudcode/cloudcode.db
+Environment=SESSION_SECRET=replace-with-long-secret
+Environment=APP_BASE_URL=https://cloudcode.tailnet.ts.net
+Environment=TMUX_BINARY_PATH=/usr/bin/tmux
+ExecStart=/usr/bin/npm run start -w backend
+Restart=always
+User=cloudcode
+
+[Install]
+WantedBy=multi-user.target
