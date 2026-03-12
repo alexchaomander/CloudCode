@@ -24,10 +24,10 @@ export function NewSession() {
       .then(([profilesRes, reposRes]) => {
         setProfiles(profilesRes.profiles)
         setRepos(reposRes.repos)
-        if (profilesRes.agentProfiles.length > 0) {
-          setAgentProfileId(profilesRes.agentProfiles[0].id)
+        if (profilesRes.profiles.length > 0) {
+          setAgentProfileId(profilesRes.profiles[0].id)
           // Set startup template if available
-          const firstProfile = profilesRes.agentProfiles[0]
+          const firstProfile = profilesRes.profiles[0]
           if (firstProfile.startupTemplate) {
             setStartupPrompt(firstProfile.startupTemplate)
           }

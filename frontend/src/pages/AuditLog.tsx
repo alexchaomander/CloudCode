@@ -61,7 +61,7 @@ export function AuditLog() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [offset])
+  }, [page])
 
   useEffect(() => {
     fetchEntries(true)

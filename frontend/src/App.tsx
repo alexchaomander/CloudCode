@@ -79,9 +79,7 @@ function AppRoutes() {
         path="/sessions/:id"
         element={
           <ProtectedRoute>
-            <Layout>
-              <SessionDetail />
-            </Layout>
+            <SessionDetail />
           </ProtectedRoute>
         }
       />

@@ -214,7 +214,7 @@ export function Profiles() {
 
   const fetchProfiles = async () => {
     try {
-      const data = await apiFetch<{ agentProfiles: AgentProfile[] }>('/api/v1/profiles')
+      const data = await apiFetch<{ profiles: AgentProfile[] }>('/api/v1/profiles')
       setProfiles(data.profiles)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profiles')

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Session, SessionSnapshot } from '../types'
 import { Terminal } from '../components/Terminal'
@@ -20,6 +20,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function StatusDot({ status }: { status: Session['status'] }) {
+  const color =
+    status === 'running' ? 'bg-green-400' :
+    status === 'starting' ? 'bg-yellow-400' :
+    status === 'error' ? 'bg-red-400' :
+    'bg-gray-500'
+  return (
+    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color} ${status === 'running' ? 'animate-pulse' : ''}`} />
+  )
+}
+
 export function SessionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -30,6 +41,7 @@ export function SessionDetail() {
   const [error, setError] = useState<string | null>(null)
   const [capturingSnapshot, setCapturingSnapshot] = useState(false)
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null)
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchSession = useCallback(async () => {
     if (!id) return
@@ -56,12 +68,15 @@ export function SessionDetail() {
 
   useEffect(() => {
     fetchSession()
+    // Refresh session status periodically so status dot stays live
+    refreshIntervalRef.current = setInterval(fetchSession, 8000)
+    return () => {
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current)
+    }
   }, [fetchSession])
 
   useEffect(() => {
-    if (activeTab === 'snapshots') {
-      fetchSnapshots()
-    }
+    if (activeTab === 'snapshots') fetchSnapshots()
   }, [activeTab, fetchSnapshots])
 
   const handleCaptureSnapshot = async () => {
@@ -87,7 +102,7 @@ export function SessionDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full py-16">
+      <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -95,8 +110,8 @@ export function SessionDetail() {
 
   if (error || !session) {
     return (
-      <div className="px-4 py-4">
-        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-4 text-red-300 text-sm">
+      <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center px-6">
+        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-4 text-red-300 text-sm w-full max-w-sm">
           <p className="font-medium mb-1">Error</p>
           <p>{error ?? 'Session not found'}</p>
           <button
@@ -111,41 +126,36 @@ export function SessionDetail() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7.5rem)]">
-      {/* Session title + back */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+    // fixed inset-0 fills the actual visible screen on mobile regardless of browser chrome
+    <div className="fixed inset-0 flex flex-col bg-gray-900">
+
+      {/* Compact header — 40px */}
+      <div className="flex items-center gap-2 px-1 bg-gray-850 border-b border-gray-700 flex-shrink-0 h-10" style={{ backgroundColor: '#161b22' }}>
         <button
           onClick={() => navigate('/')}
-          className="p-2 text-gray-400 hover:text-gray-200 rounded-md min-h-[44px] min-w-[44px] flex items-center justify-center"
+          className="p-2 text-gray-400 hover:text-gray-200 rounded flex items-center justify-center min-w-[36px]"
+          aria-label="Back"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold text-gray-100 truncate">{session.title}</h2>
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1 text-xs ${
-              session.status === 'running' ? 'text-green-400' :
-              session.status === 'starting' ? 'text-yellow-400' :
-              session.status === 'error' ? 'text-red-400' :
-              'text-gray-400'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full bg-current ${session.status === 'running' ? 'animate-pulse' : ''}`} />
-              {session.status}
-            </span>
-            <span className="text-xs text-gray-500">{session.agentProfile?.name}</span>
-          </div>
-        </div>
+        <StatusDot status={session.status} />
+        <span className="text-sm font-semibold text-gray-100 truncate flex-1 min-w-0">
+          {session.title}
+        </span>
+        <span className="text-xs text-gray-500 flex-shrink-0 pr-2">
+          {session.agentProfile?.name ?? ''}
+        </span>
       </div>
 
-      {/* Tabs */}
-      <div className="flex bg-gray-800 border-b border-gray-700 flex-shrink-0">
+      {/* Tab strip — 36px */}
+      <div className="flex bg-gray-800 border-b border-gray-700 flex-shrink-0" style={{ height: '36px' }}>
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-3 text-sm font-medium transition-colors min-h-[44px] border-b-2 ${
+            className={`flex-1 text-xs font-medium transition-colors border-b-2 ${
               activeTab === tab.id
                 ? 'text-blue-400 border-blue-400'
                 : 'text-gray-400 hover:text-gray-200 border-transparent'
@@ -156,11 +166,12 @@ export function SessionDetail() {
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Content — fills the rest */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === 'terminal' && (
+        {/* Terminal: always rendered but hidden when not active so xterm stays alive */}
+        <div className={`h-full ${activeTab === 'terminal' ? 'block' : 'hidden'}`}>
           <Terminal sessionId={session.publicId} />
-        )}
+        </div>
 
         {activeTab === 'snapshots' && (
           <div className="h-full overflow-auto px-4 py-4">
