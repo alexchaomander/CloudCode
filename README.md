@@ -21,6 +21,16 @@ It allows you to orchestrate long-running agent tasks on your powerful workstati
 
 ---
 
+## 🏗️ How It Works
+
+CloudCode acts as a **private orchestration layer** on your workstation. When you start a session, CloudCode launches your agent inside a native **tmux** session. This ensures that the agent keeps running even if your phone loses connection or you close your browser.
+
+Control everything via a secure, mobile-optimized terminal interface over **Tailscale**.
+
+[**Read the detailed walkthrough →**](docs/how-it-works.md)
+
+---
+
 ## 🛠️ Architecture
 
 *   **Backend**: Fastify (Node.js) + TypeScript + SQLite
