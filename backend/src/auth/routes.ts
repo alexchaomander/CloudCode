@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import os from 'node:os';
 import {
   hashPassword,
   verifyPassword,
@@ -156,7 +157,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /api/v1/auth/bootstrap-status - login page uses this to redirect to /bootstrap
   fastify.get('/api/v1/auth/bootstrap-status', async (_request, reply) => {
-    return reply.send({ needsBootstrap: countUsers() === 0 });
+    return reply.send({ 
+      needsBootstrap: countUsers() === 0,
+      suggestedUsername: os.userInfo().username
+    });
   });
 
   // POST /api/v1/auth/logout

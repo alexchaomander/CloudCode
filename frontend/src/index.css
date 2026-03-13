@@ -2,26 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  -webkit-tap-highlight-color: transparent;
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overscroll-behavior: none;
+    @apply bg-zinc-950 text-zinc-100 antialiased;
+  }
+
+  /* Custom scrollbar for a more integrated look */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors;
+  }
 }
 
-body {
-  overscroll-behavior: none;
-}
-
-/* xterm.js container styles */
+/* xterm.js container styles with theme matching */
 .xterm-container {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  @apply bg-black;
 }
 
 .xterm-container .xterm {
   height: 100%;
-  padding: 4px;
+  padding: 8px;
 }
 
 .xterm-container .xterm-viewport {
   overflow-y: auto;
+}
+
+/* Terminal Cursor Glow */
+.xterm-cursor {
+  @apply drop-shadow-[0_0_5px_rgba(56,189,248,0.5)];
+}
+
+/* Haptic-like tap feedback for mobile */
+.tap-feedback {
+  @apply active:scale-[0.98] transition-transform duration-75;
 }

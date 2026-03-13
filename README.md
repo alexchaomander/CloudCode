@@ -3,156 +3,95 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org)
+[![Tailscale](https://img.shields.io/badge/Network-Tailscale-blue)](https://tailscale.com)
 
-**A self-hosted, mobile-first web interface for managing local CLI-based coding agents.**
+**CloudCode** is a self-hosted, mobile-first web interface for managing local CLI-based coding agents (like Claude Code, Gemini CLI, and GitHub Copilot CLI). 
 
-Run Claude Code, Gemini CLI, Codex, and other coding agents on your workstation — then control them from your phone over a private Tailscale network. Sessions are tmux-backed and survive browser disconnects and phone sleep.
-
----
-
-## Features
-
-- **Live terminal** — interact with agent processes from any browser, including mobile
-- **Durable sessions** — tmux-backed sessions persist independently of your browser connection
-- **Multiple agents** — manage many concurrent agent sessions from a single dashboard
-- **Mobile-first UI** — designed for phone portrait mode with thumb-friendly controls
-- **Secure by default** — Tailscale network layer + app password authentication
-- **Agent profiles** — pre-configured profiles for popular coding CLIs, fully editable
-- **Audit trail** — all sensitive actions logged with actor, target, and timestamp
+It allows you to orchestrate long-running agent tasks on your powerful workstation and monitor/interact with them from any device—especially your phone—via a secure, persistent terminal interface.
 
 ---
 
-## How It Works
+## 🚀 Key Features
 
-```
-┌─────────────────────────────────────────────┐
-│                  Your Phone                  │
-│            (Tailscale connected)             │
-└──────────────────┬──────────────────────────┘
-                   │ HTTPS / WebSocket
-┌──────────────────▼──────────────────────────┐
-│              CloudCode Server                │
-│   React Frontend  +  Fastify Backend         │
-│                                             │
-│  ┌─────────────┐  ┌──────────────────────┐  │
-│  │   REST API  │  │  WebSocket Terminal  │  │
-│  └──────┬──────┘  └──────────┬───────────┘  │
-│         │                    │              │
-│  ┌──────▼────────────────────▼───────────┐  │
-│  │          Session Manager              │  │
-│  └──────────────────┬────────────────────┘  │
-│                     │                        │
-│  ┌──────────────────▼────────────────────┐  │
-│  │         tmux Sessions                 │  │
-│  │  ┌──────────┐ ┌──────────┐            │  │
-│  │  │  claude  │ │  gemini  │  ...       │  │
-│  │  └──────────┘ └──────────┘            │  │
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
-```
-
-CloudCode is **orchestration**, not a remote desktop. tmux is the durability layer — sessions live on your machine, CloudCode just provides the interface.
+*   **📱 Mobile-First Terminal**: A custom thumb-friendly terminal keybar with `Ctrl`, `Esc`, `Tab`, and arrow keys.
+*   **🔄 Persistent Sessions**: All agents run inside `tmux` sessions. Disconnect and reconnect anytime without losing progress or output.
+*   **🔒 Secure by Design**: Optimized for use over [Tailscale](https://tailscale.com). Optional identity validation ensures only you can access your workstation.
+*   **🤖 Universal Orchestration**: Pre-configured for Claude Code, Gemini CLI, OpenAI Codex, and Copilot. Easily add any custom CLI tool as a profile.
+*   **📊 Session Snapshots & Audit**: Log agent activity and capture pane state for later review.
 
 ---
 
-## Quick Start
+## 🛠️ Architecture
 
-**Prerequisites:** Node.js 22+, tmux, at least one coding agent CLI in PATH.
+*   **Backend**: Fastify (Node.js) + TypeScript + SQLite
+*   **Frontend**: React + Vite + Tailwind CSS
+*   **Orchestration**: native `tmux` integration
+*   **Networking**: Native IPv6/Tailscale support
+
+---
+
+## 📦 Getting Started
+
+### 1. Installation
 
 ```bash
-# 1. Clone
 git clone https://github.com/alexchaomander/CloudCode.git
 cd CloudCode
-
-# 2. Install dependencies
 npm install
+```
 
-# 3. Configure
+### 2. Quick Start
+
+```bash
+# 1. Setup your environment
 cp .env.example .env
-# Edit .env — set SESSION_SECRET to a long random string:
-#   openssl rand -hex 64
+# Edit .env to set your SESSION_SECRET
 
-# 4. Migrate database + seed agent profiles
+# 2. Run migrations
 npm run migrate
 
-# 5. Build frontend
+# 3. Build and start
 npm run build
-
-# 6. Start
 npm start
 ```
 
-Open `http://localhost:3000/bootstrap` to create your admin account, then log in at `/login`.
+For detailed setup, see the [Installation Guide](docs/install.md).
 
 ---
 
-## Tech Stack
+## 🧪 Testing
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Node.js 22 · TypeScript · Fastify · better-sqlite3 |
-| Auth | argon2 · session cookies |
-| Terminal | WebSocket · tmux pane capture |
-| Frontend | React 18 · TypeScript · Vite · Tailwind CSS |
-| Terminal UI | xterm.js |
-| Runtime | tmux · systemd |
+```bash
+cd backend
+npm test
+```
 
 ---
 
-## Supported Agent CLIs
+## 📖 Documentation
 
-CloudCode ships with pre-configured profiles for the four major coding agent CLIs:
-
-| Agent | Vendor | Command | Auth |
-|-------|--------|---------|------|
-| [Claude Code](docs/agents.md#claude-code) | Anthropic | `claude` | Anthropic account / `ANTHROPIC_API_KEY` |
-| [Gemini CLI](docs/agents.md#gemini-cli) | Google | `gemini` | Google account / `GEMINI_API_KEY` |
-| [OpenAI Codex](docs/agents.md#openai-codex) | OpenAI | `codex` | `OPENAI_API_KEY` |
-| [GitHub Copilot CLI](docs/agents.md#github-copilot-cli) | GitHub | `copilot` | GitHub account / `COPILOT_GITHUB_TOKEN` |
-
-All four are persistent interactive REPLs — sessions stay open in tmux across browser disconnects. Profiles are fully editable and you can add any CLI tool. See **[docs/agents.md](docs/agents.md)** for setup instructions.
+*   [Installation Guide](docs/install.md)
+*   [Agent Setup & Extensibility](docs/agents.md)
+*   [Secure Remote Access (Tailscale)](docs/tailscale.md)
 
 ---
 
-## Security Model
+## 🛡️ Platform Support
 
-CloudCode executes local commands, so it has multiple security layers:
-
-1. **Network** — only listens on Tailscale IP or localhost; never publicly exposed
-2. **Tailscale Identity** — optionally validates `X-Tailscale-User` header to restrict access to approved tailnet identities
-3. **Application auth** — username + password (argon2id hashed); 30-day session cookies
-4. **Controlled execution** — sessions launched only from pre-approved agent profiles
-5. **Path validation** — working directories restricted to registered repo roots; symlink escapes rejected
-6. **Audit logs** — every sensitive action recorded with actor, target, and metadata
-
-See [docs/tailscale.md](docs/tailscale.md) for the recommended network setup.
+| OS | Supported |
+| :--- | :--- |
+| Linux | ✅ (Native) |
+| macOS | ✅ (Supported) |
+| Windows | ❌ (Not supported; requires tmux) |
 
 ---
 
-## Documentation
-
-- [Installation Guide](docs/install.md) — full setup, systemd service, troubleshooting
-- [Agent CLI Setup](docs/agents.md) — install and authenticate Claude Code, Gemini CLI, OpenAI Codex, GitHub Copilot CLI
-- [Tailscale Setup](docs/tailscale.md) — secure remote access from your phone
-
----
-
-## Supported Platforms
-
-| Platform | Status |
-|----------|--------|
-| Linux | Primary |
-| macOS | Supported |
-| Windows | Not supported (tmux dependency) |
-
----
-
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-## License
+## 📜 License
 
-[MIT](LICENSE) — © 2025 CloudCode Contributors
+[MIT](LICENSE) — © 2026 CloudCode Contributors

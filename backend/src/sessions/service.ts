@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import { logAudit } from '../audit/service.js';
 import * as tmux from '../tmux/adapter.js';
+import { validateWorkdir } from '../utils/paths.js';
 import type { AgentProfile, Session } from '../db/schema.js';
 
 export interface CreateSessionParams {
@@ -107,11 +108,17 @@ export async function createSession(params: CreateSessionParams): Promise<Sessio
   // Determine working directory
   let effectiveWorkdir = workdir ?? profile.default_workdir ?? process.cwd();
 
-  // If repo_root_id provided, use its path
+  // If repo_root_id provided, validate that workdir is within it
   if (repoRootId) {
     const repo = db.prepare('SELECT * FROM repo_roots WHERE id = ?').get(repoRootId) as { absolute_path: string } | undefined;
-    if (repo && !workdir) {
-      effectiveWorkdir = repo.absolute_path;
+    if (repo) {
+      try {
+        effectiveWorkdir = validateWorkdir(repo.absolute_path, workdir ?? '.');
+      } catch (err: any) {
+        throw new Error(`Invalid working directory: ${err.message}`);
+      }
+    } else {
+      throw new Error(`Repository root not found: ${repoRootId}`);
     }
   }
 

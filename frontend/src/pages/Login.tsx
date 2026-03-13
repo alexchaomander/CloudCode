@@ -17,7 +17,6 @@ export function Login() {
       return
     }
 
-    // Check if bootstrap is needed
     if (!isLoading && !isAuthenticated) {
       apiFetch<{ needsBootstrap: boolean }>('/api/v1/auth/bootstrap-status')
         .then(res => {
@@ -25,9 +24,7 @@ export function Login() {
             navigate('/bootstrap', { replace: true })
           }
         })
-        .catch(() => {
-          // If endpoint doesn't exist, assume no bootstrap needed
-        })
+        .catch(() => {})
     }
   }, [isLoading, isAuthenticated, navigate])
 
@@ -47,25 +44,31 @@ export function Login() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">⚡</div>
-          <h1 className="text-3xl font-bold text-white">CloudCode</h1>
-          <p className="text-gray-400 mt-2 text-sm">Sign in to your account</p>
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4 selection:bg-indigo-500/30">
+      <div className="w-full max-w-sm animate-slide-up">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl shadow-2xl shadow-indigo-600/20 mb-6 rotate-3 hover:rotate-0 transition-transform duration-300">
+            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 9l3 3-3 3m5 0h3" />
+            </svg>
+          </div>
+          <h1 className="text-4xl font-black text-white tracking-tighter mb-2 italic">CloudCode</h1>
+          <p className="text-zinc-500 font-medium tracking-tight">Your terminal, everywhere.</p>
         </div>
 
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden group">
+          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+          
+          <form onSubmit={handleSubmit} className="space-y-6 relative">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="username" className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 ml-1">
                 Username
               </label>
               <input
@@ -77,13 +80,13 @@ export function Login() {
                 required
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                className="w-full px-5 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200"
                 placeholder="Enter username"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="password" className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 ml-1">
                 Password
               </label>
               <input
@@ -93,13 +96,16 @@ export function Login() {
                 required
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                placeholder="Enter password"
+                className="w-full px-5 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200"
+                placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <div className="bg-red-900/50 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
+              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 text-xs font-bold flex items-center gap-2 animate-shake">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 {error}
               </div>
             )}
@@ -107,19 +113,28 @@ export function Login() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors min-h-[48px] flex items-center justify-center gap-2"
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:bg-indigo-900 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all duration-200 flex items-center justify-center gap-2 group"
             >
               {submitting ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Signing in...
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="uppercase tracking-widest text-[10px]">Verifying...</span>
                 </>
               ) : (
-                'Sign In'
+                <>
+                  <span className="uppercase tracking-widest text-[10px]">Sign In</span>
+                  <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </>
               )}
             </button>
           </form>
         </div>
+        
+        <p className="mt-8 text-center text-zinc-600 text-[10px] font-bold uppercase tracking-[0.2em]">
+          Mobile First · Self Hosted · Secure
+        </p>
       </div>
     </div>
   )

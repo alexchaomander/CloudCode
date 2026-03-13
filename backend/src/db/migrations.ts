@@ -1,8 +1,9 @@
 import { db } from './index.js';
 import { nanoid } from 'nanoid';
+import { fileURLToPath } from 'url';
 
-function runMigrations(): void {
-  console.log('Running database migrations...');
+export function runMigrations(): void {
+  // console.log('Running database migrations...');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -101,13 +102,13 @@ function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
   `);
 
-  console.log('Tables created successfully.');
+  // console.log('Tables created successfully.');
 
   // Seed default agent profiles
   const existingProfiles = db.prepare('SELECT COUNT(*) as count FROM agent_profiles').get() as { count: number };
 
   if (existingProfiles.count === 0) {
-    console.log('Seeding default agent profiles...');
+    // console.log('Seeding default agent profiles...');
 
     const insertProfile = db.prepare(`
       INSERT INTO agent_profiles (id, name, slug, command, args_json, env_json, startup_template, stop_method, supports_interactive_input)
@@ -121,9 +122,6 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'Claude Code',
         slug: 'claude-code',
-        // `claude` starts an interactive REPL in the current directory.
-        // Auth: run `claude` once manually and complete browser OAuth, or set
-        // ANTHROPIC_API_KEY in the environment.
         command: 'claude',
         args: [] as string[],
         startup_template: null as string | null,
@@ -134,8 +132,6 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'Gemini CLI',
         slug: 'gemini-cli',
-        // `gemini` starts an interactive chat session.
-        // Auth: run `gemini` once and complete Google OAuth, or set GEMINI_API_KEY.
         command: 'gemini',
         args: [] as string[],
         startup_template: null as string | null,
@@ -146,8 +142,6 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'OpenAI Codex',
         slug: 'openai-codex',
-        // `codex` starts an interactive coding agent session.
-        // Auth: set OPENAI_API_KEY in the environment.
         command: 'codex',
         args: [] as string[],
         startup_template: null as string | null,
@@ -158,11 +152,6 @@ function runMigrations(): void {
         id: nanoid(),
         name: 'GitHub Copilot CLI',
         slug: 'github-copilot-cli',
-        // The new standalone GitHub Copilot CLI (npm install -g @github/copilot)
-        // is a persistent interactive REPL — run `copilot` to start a session.
-        // The old `gh copilot` extension was deprecated October 2025.
-        // Auth: run `/login` on first launch, or set COPILOT_GITHUB_TOKEN /
-        // GH_TOKEN / GITHUB_TOKEN in the environment.
         command: 'copilot',
         args: [] as string[],
         startup_template: null as string | null,
@@ -188,12 +177,10 @@ function runMigrations(): void {
     });
 
     seedTx();
-    console.log('Default agent profiles seeded.');
-  } else {
-    console.log('Agent profiles already exist, skipping seed.');
+    // console.log('Default agent profiles seeded.');
   }
-
-  console.log('Migrations completed successfully.');
 }
 
-runMigrations();
+if (import.meta.url === `file://${fileURLToPath(import.meta.url)}`) {
+  runMigrations();
+}

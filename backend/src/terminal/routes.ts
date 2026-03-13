@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { SocketStream } from '@fastify/websocket';
 import type WebSocket from 'ws';
 import { requireAuth } from '../auth/middleware.js';
-import { getSession } from '../sessions/service.js';
+import { getSession, getSessionByPublicId } from '../sessions/service.js';
 import * as tmux from '../tmux/adapter.js';
 import { validateSession } from '../auth/service.js';
 
@@ -112,7 +112,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireAuth },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const session = getSession(id);
+      const session = getSession(id) ?? getSessionByPublicId(id);
 
       if (!session) {
         return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
@@ -174,7 +174,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     // Subscribe to sessionId if provided in query
     const querySessionId = (request.query as Record<string, string>)['sessionId'];
     if (querySessionId) {
-      const session = getSession(querySessionId);
+      const session = getSession(querySessionId) ?? getSessionByPublicId(querySessionId);
       if (session) {
         sessionId = session.id;
         tmuxSessionName = session.tmux_session_name;
@@ -227,7 +227,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
                   removeConnection(sessionId, ws);
                 }
 
-                const session = getSession(message.sessionId);
+                const session = getSession(message.sessionId) ?? getSessionByPublicId(message.sessionId);
                 if (!session) {
                   ws.send(JSON.stringify({
                     type: 'session.error',

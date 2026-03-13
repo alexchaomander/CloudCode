@@ -1,11 +1,23 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const TMUX = process.env.TMUX_BINARY_PATH ?? 'tmux';
 
-function escapeShellArg(arg: string): string {
-  return `'${arg.replace(/'/g, "'\\''")}'`;
+export class TmuxError extends Error {
+  constructor(message: string, public readonly args: string[]) {
+    super(message);
+    this.name = 'TmuxError';
+  }
+}
+
+async function run(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  try {
+    return await execFileAsync(TMUX, args);
+  } catch (error: any) {
+    const stderr = error?.stderr?.toString() || error?.message || 'tmux command failed';
+    throw new TmuxError(stderr.trim(), args);
+  }
 }
 
 export async function createSession(
@@ -15,16 +27,6 @@ export async function createSession(
   cwd: string,
   env?: Record<string, string>
 ): Promise<void> {
-  const envParts: string[] = [];
-  if (env) {
-    for (const [key, value] of Object.entries(env)) {
-      envParts.push(`${key}=${escapeShellArg(value)}`);
-    }
-  }
-
-  const fullCommand = [command, ...args].map(escapeShellArg).join(' ');
-
-  // Build env-set commands for tmux
   const envArgs: string[] = [];
   if (env) {
     for (const [key, value] of Object.entries(env)) {
@@ -32,17 +34,20 @@ export async function createSession(
     }
   }
 
+  // tmux new-session -d -s name -c cwd -e K=V -- command args...
+  // Passing command and args after -- ensures they are executed directly without shell interpolation.
   const tmuxArgs = [
     'new-session',
     '-d',
     '-s', name,
     '-c', cwd,
     ...envArgs,
-    fullCommand,
+    '--',
+    command,
+    ...args,
   ];
 
-  const cmd = [TMUX, ...tmuxArgs.map(escapeShellArg)].join(' ');
-  await execAsync(cmd);
+  await run(tmuxArgs);
 }
 
 export interface TmuxSessionInfo {
@@ -53,9 +58,11 @@ export interface TmuxSessionInfo {
 
 export async function listSessions(): Promise<TmuxSessionInfo[]> {
   try {
-    const { stdout } = await execAsync(
-      `${TMUX} list-sessions -F '#{session_name}:#{session_windows}:#{session_created}'`
-    );
+    const { stdout } = await run([
+      'list-sessions',
+      '-F',
+      '#{session_name}:#{session_windows}:#{session_created}'
+    ]);
 
     if (!stdout.trim()) return [];
 
@@ -79,7 +86,7 @@ export async function listSessions(): Promise<TmuxSessionInfo[]> {
 
 export async function hasSession(name: string): Promise<boolean> {
   try {
-    await execAsync(`${TMUX} has-session -t ${escapeShellArg(name)}`);
+    await run(['has-session', '-t', name]);
     return true;
   } catch {
     return false;
@@ -88,9 +95,7 @@ export async function hasSession(name: string): Promise<boolean> {
 
 export async function capturePane(sessionName: string): Promise<string> {
   try {
-    const { stdout } = await execAsync(
-      `${TMUX} capture-pane -t ${escapeShellArg(sessionName)} -p -e`
-    );
+    const { stdout } = await run(['capture-pane', '-t', sessionName, '-p', '-e']);
     return stdout;
   } catch {
     return '';
@@ -98,15 +103,13 @@ export async function capturePane(sessionName: string): Promise<string> {
 }
 
 export async function sendKeys(sessionName: string, keys: string): Promise<void> {
-  // Use send-keys with literal flag to avoid tmux key interpretation
-  await execAsync(
-    `${TMUX} send-keys -t ${escapeShellArg(sessionName)} ${escapeShellArg(keys)}`
-  );
+  // send-keys -t sessionName keys
+  await run(['send-keys', '-t', sessionName, keys]);
 }
 
 export async function killSession(sessionName: string): Promise<void> {
   try {
-    await execAsync(`${TMUX} kill-session -t ${escapeShellArg(sessionName)}`);
+    await run(['kill-session', '-t', sessionName]);
   } catch {
     // Session may already be gone
   }
@@ -118,9 +121,12 @@ export async function resizeWindow(
   height: number
 ): Promise<void> {
   try {
-    await execAsync(
-      `${TMUX} resize-window -t ${escapeShellArg(sessionName)} -x ${width} -y ${height}`
-    );
+    await run([
+      'resize-window',
+      '-t', sessionName,
+      '-x', width.toString(),
+      '-y', height.toString()
+    ]);
   } catch {
     // Best-effort resize
   }
@@ -128,9 +134,7 @@ export async function resizeWindow(
 
 export async function sendCtrlC(sessionName: string): Promise<void> {
   try {
-    await execAsync(
-      `${TMUX} send-keys -t ${escapeShellArg(sessionName)} C-c`
-    );
+    await run(['send-keys', '-t', sessionName, 'C-c']);
   } catch {
     // Best-effort
   }

@@ -70,59 +70,71 @@ export function Layout({ children }: LayoutProps) {
   )?.[1] ?? 'CloudCode'
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-900 text-gray-100">
+    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-gray-800 border-b border-gray-700 h-14 flex items-center px-4">
-        <div className="flex-1 flex items-center gap-3">
-          <span className="text-blue-400 font-bold text-lg">CloudCode</span>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-900/80 backdrop-blur-md border-b border-zinc-800 h-14 flex items-center px-4">
+        <div className="flex-1 flex items-center gap-2">
+          <div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M8 9l3 3-3 3m5 0h3" />
+            </svg>
+          </div>
+          <span className="text-zinc-100 font-bold tracking-tight">CloudCode</span>
           {pageTitle !== 'CloudCode' && (
             <>
-              <span className="text-gray-600">/</span>
-              <span className="text-gray-300 text-sm">{pageTitle}</span>
+              <span className="text-zinc-700 font-light">/</span>
+              <span className="text-zinc-400 text-xs font-medium uppercase tracking-wider truncate max-w-[120px]">{pageTitle}</span>
             </>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {user && (
-            <span className="text-xs text-gray-400 hidden sm:block">{user.username}</span>
+            <div className="hidden sm:flex items-center gap-2 bg-zinc-800/50 px-2 py-1 rounded-full border border-zinc-700/50">
+              <div className="w-4 h-4 rounded-full bg-zinc-600 flex items-center justify-center text-[8px] font-bold">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-[10px] text-zinc-400 font-medium">{user.username}</span>
+            </div>
           )}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-md transition-colors min-h-[44px]"
+            className="flex items-center justify-center text-zinc-400 hover:text-zinc-100 bg-zinc-800 hover:bg-zinc-700 w-10 h-10 rounded-full transition-all duration-200 tap-feedback border border-zinc-700/50"
+            title="Logout"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 pt-14 pb-16 overflow-auto">
-        <div className="max-w-2xl mx-auto w-full">
+      <main className="flex-1 pt-14 pb-16 overflow-x-hidden">
+        <div className="max-w-2xl mx-auto w-full animate-fade-in">
           {children}
         </div>
       </main>
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-800 border-t border-gray-700 h-16 flex items-center">
-        <div className="flex w-full max-w-2xl mx-auto">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800 h-16 flex items-center px-2">
+        <div className="flex w-full max-w-2xl mx-auto gap-1">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[64px] transition-colors ${
+                `flex-1 flex flex-col items-center justify-center py-1 gap-0.5 rounded-xl transition-all duration-200 tap-feedback ${
                   isActive
-                    ? 'text-blue-400'
-                    : 'text-gray-400 hover:text-gray-200'
+                    ? 'text-indigo-400 bg-indigo-500/5'
+                    : 'text-zinc-500 hover:text-zinc-300'
                 }`
               }
             >
-              <NavIcon d={item.icon} />
-              <span className="text-xs">{item.label}</span>
+              <div className={`transition-transform duration-200 ${location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to)) ? 'scale-110' : 'scale-100'}`}>
+                <NavIcon d={item.icon} />
+              </div>
+              <span className="text-[10px] font-semibold tracking-wide uppercase">{item.label}</span>
             </NavLink>
           ))}
         </div>

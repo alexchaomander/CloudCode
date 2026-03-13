@@ -8,8 +8,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "migrate": "tsx src/db/migrations.ts"
+    "start": "node --env-file=../.env dist/index.js",
+    "migrate": "tsx src/db/migrations.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
@@ -17,7 +18,7 @@
     "@fastify/websocket": "^8.3.1",
     "@fastify/static": "^7.0.4",
     "argon2": "^0.31.2",
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "^11.8.1",
     "fastify": "^4.26.2",
     "nanoid": "^5.0.7",
     "node-pty": "^1.0.0",
@@ -30,6 +31,7 @@
     "@types/node": "^20.12.7",
     "@types/ws": "^8.5.10",
     "tsx": "^4.7.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.8"
   }
 }
