@@ -1,107 +1,65 @@
 # CloudCode
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org)
-[![Tailscale](https://img.shields.io/badge/Network-Tailscale-blue)](https://tailscale.com)
+CloudCode is a secure, self-hosted web interface for managing and remote-controlling your local coding agents (Claude Code, Gemini CLI, Copilot, etc.) from any device. 
 
-**CloudCode** is a self-hosted, mobile-first web interface for managing local CLI-based coding agents (like Claude Code, Gemini CLI, and GitHub Copilot CLI). 
+Think of it as a private "Remote Control Hub" for your AI tools. It uses `tmux` to ensure your sessions are persistent and perfectly synced between your physical terminal and the web.
 
-It allows you to orchestrate long-running agent tasks on your powerful workstation and monitor/interact with them from any device—especially your phone—via a secure, persistent terminal interface.
+## 🚀 Features
 
----
+- **Agent Agnostic:** Works with Claude Code, Gemini CLI, GitHub Copilot CLI, OpenAI Codex, or any arbitrary CLI tool.
+- **Magic Pairing:** Scan a QR code in your terminal to instantly log in on your phone—no passwords or SSH keys required.
+- **Perfect Sync:** Real-time mirroring between your local terminal and the mobile web interface.
+- **Zero-Config Remote Access:** Built-in support for **Tailscale** (private network) and **Cloudflare Tunnels** (public relay) to work behind any firewall.
+- **Git Worktree Isolation:** Launch agents in isolated worktrees so your local working directory stays clean.
+- **Persistent Sessions:** Sessions live in `tmux`, so they survive network drops, device switches, and laptop sleep cycles.
 
-## 🚀 Key Features
-
-*   **📱 Mobile-First Terminal**: A custom thumb-friendly terminal keybar with `Ctrl`, `Esc`, `Tab`, and arrow keys.
-*   **🔄 Persistent Sessions**: All agents run inside `tmux` sessions. Disconnect and reconnect anytime without losing progress or output.
-*   **🔒 Secure by Design**: Optimized for use over [Tailscale](https://tailscale.com). Optional identity validation ensures only you can access your workstation.
-*   **🤖 Universal Orchestration**: Pre-configured for Claude Code, Gemini CLI, OpenAI Codex, and Copilot. Easily add any custom CLI tool as a profile.
-*   **📊 Session Snapshots & Audit**: Log agent activity and capture pane state for later review.
-
----
-
-## 🏗️ How It Works
-
-CloudCode acts as a **private orchestration layer** on your workstation. When you start a session, CloudCode launches your agent inside a native **tmux** session. This ensures that the agent keeps running even if your phone loses connection or you close your browser.
-
-Control everything via a secure, mobile-optimized terminal interface over **Tailscale**.
-
-[**Read the detailed walkthrough →**](docs/how-it-works.md)
-
----
-
-## 🛠️ Architecture
-
-*   **Backend**: Fastify (Node.js) + TypeScript + SQLite
-*   **Frontend**: React + Vite + Tailwind CSS
-*   **Orchestration**: native `tmux` integration
-*   **Networking**: Native IPv6/Tailscale support
-
----
-
-## 📦 Getting Started
-
-### 1. Installation
+## 📦 Installation
 
 ```bash
+# 1. Clone the repo
 git clone https://github.com/alexchaomander/CloudCode.git
 cd CloudCode
+
+# 2. One-command build and install
 npm install
+npm run install:cli
 ```
 
-### 2. Quick Start
+## 🛠 Usage
 
+### 1. The Interactive Launch (Like `claude --rc`)
+Launch an agent locally and have it immediately ready for remote control:
 ```bash
-# 1. Setup your environment
-cp .env.example .env
-# Edit .env to set your SESSION_SECRET
-
-# 2. Run migrations
-npm run migrate
-
-# 3. Build and start
-npm run build
-npm start
+cloudcode run claude-code --rc
 ```
 
-For detailed setup, see the [Installation Guide](docs/install.md).
-
----
-
-## 🧪 Testing
-
+### 2. The Server Mode (Like `claude remote-control`)
+Expose your environment so you can dial-in from your phone later:
 ```bash
-cd backend
-npm test
+cloudcode start --rc
 ```
 
----
+### 3. The Mid-Session Handoff (Like `/rc`)
+Already in a tmux session? Share it to your phone instantly:
+```bash
+# Run this inside your tmux session
+cloudcode share
+```
 
-## 📖 Documentation
+### 4. Zero-Config Public Access
+No Tailscale? No problem. Use a Cloudflare relay:
+```bash
+cloudcode start --rc --tunnel
+```
 
-*   [Installation Guide](docs/install.md)
-*   [Agent Setup & Extensibility](docs/agents.md)
-*   [Secure Remote Access (Tailscale)](docs/tailscale.md)
+## 🏗 Architecture
 
----
+CloudCode is built with a focus on security and performance:
+- **Backend:** Node.js (Fastify) + SQLite (Better-SQLite3)
+- **Frontend:** React + Tailwind CSS + xterm.js
+- **PTY Sidecar:** High-performance Go-based PTY manager
+- **Multiplexer:** `tmux` (Industry standard for session persistence)
 
-## 🛡️ Platform Support
+## 📄 License
 
-| OS | Supported |
-| :--- | :--- |
-| Linux | ✅ (Native) |
-| macOS | ✅ (Supported) |
-| Windows | ❌ (Not supported; requires tmux) |
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## 📜 License
-
-[MIT](LICENSE) — © 2026 CloudCode Contributors
+MIT

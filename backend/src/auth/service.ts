@@ -1,4 +1,4 @@
-import * as argon2 from 'argon2';
+import argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
@@ -114,4 +114,35 @@ export function createUser(username: string, passwordHash: string, isAdmin: bool
 export function cleanExpiredSessions(): void {
   const now = new Date().toISOString();
   db.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").run(now);
+}
+
+export function createPairingToken(userId: string): string {
+  const token = randomBytes(16).toString('hex');
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+  db.prepare(`
+    INSERT INTO pairing_tokens (token, user_id, expires_at)
+    VALUES (?, ?, ?)
+  `).run(token, userId, expiresAt.toISOString());
+
+  return token;
+}
+
+export function consumePairingToken(token: string): string | null {
+  const now = new Date().toISOString();
+  const result = db.prepare(`
+    SELECT user_id FROM pairing_tokens
+    WHERE token = ? AND expires_at > ?
+  `).get(token, now) as { user_id: string } | undefined;
+
+  if (!result) return null;
+
+  // Delete all tokens for this user once one is consumed
+  db.prepare('DELETE FROM pairing_tokens WHERE user_id = ?').run(result.user_id);
+
+  return result.user_id;
+}
+
+export function getFirstAdminUser(): User | undefined {
+  return db.prepare('SELECT * FROM users WHERE is_admin = 1 ORDER BY created_at ASC LIMIT 1').get() as User | undefined;
 }

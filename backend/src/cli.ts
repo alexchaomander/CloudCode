@@ -1,0 +1,289 @@
+#!/usr/bin/env node
+import { Command } from 'commander';
+import chalk from 'chalk';
+import qrcode from 'qrcode-terminal';
+import { execSync, spawn } from 'child_process';
+import { join } from 'path';
+import { tmpdir, networkInterfaces } from 'os';
+import { buildApp } from './index.js';
+import { runMigrations } from './db/migrations.js';
+import { getFirstAdminUser, createPairingToken } from './auth/service.js';
+import { syncSessionStatus, createSession } from './sessions/service.js';
+import { sidecarManager } from './terminal/sidecar-manager.js';
+import { db } from './db/index.js';
+import { startTunnel, stopTunnel } from './utils/tunnel.js';
+
+const program = new Command();
+
+program
+  .name('cloudcode')
+  .description('CloudCode CLI — Secure remote control for your local coding environment')
+  .version('0.1.0');
+
+// Helper to start the server in-process
+async function startServer(options: { port: number; host: string; sidecarSocketPath?: string }) {
+  runMigrations();
+  const app = await buildApp({ sidecarSocketPath: options.sidecarSocketPath });
+
+  const syncInterval = setInterval(async () => {
+    try {
+      await syncSessionStatus();
+    } catch (err) {
+      app.log.error({ err }, 'Failed to sync session status');
+    }
+  }, 30_000);
+
+  const shutdown = async (signal: string): Promise<void> => {
+    clearInterval(syncInterval);
+    try {
+      stopTunnel();
+      await sidecarManager.stop();
+      await app.close();
+      process.exit(0);
+    } catch (err) {
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  await app.listen({ port: options.port, host: options.host });
+  return app;
+}
+
+program
+  .command('start')
+  .description('Start the CloudCode server')
+  .option('-p, --port <number>', 'Port to listen on', '3000')
+  .option('-h, --host <string>', 'Host to listen on', '0.0.0.0')
+  .option('--rc', 'Enable Remote Control mode (Tailscale + Pairing QR)')
+  .option('--tunnel', 'Expose the server via a public Cloudflare tunnel', false)
+  .action(async (options: { port: string; host: string; rc: boolean; tunnel: boolean }) => {
+    console.log(chalk.blue.bold('\n🚀 Starting CloudCode...'));
+    const port = parseInt(options.port, 10);
+    const host = options.host;
+
+    try {
+      let tunnelUrl = '';
+      if (options.tunnel) {
+        console.log(chalk.magenta('☁️  Opening Cloudflare tunnel...'));
+        const tunnel = await startTunnel(port);
+        tunnelUrl = tunnel.url;
+        console.log(chalk.green(`✅ Public Tunnel URL: ${chalk.underline(tunnelUrl)}`));
+      }
+
+      await startServer({ port, host });
+      console.log(chalk.green(`\n✅ CloudCode is running locally at: ${chalk.underline(`http://localhost:${port}`)}`));
+
+      if (options.rc) {
+        await showPairingInfo(port, undefined, tunnelUrl);
+      }
+    } catch (err) {
+      console.error(chalk.red('Failed to start server:'), err);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('run')
+  .description('Launch an agent session and start the remote control server')
+  .argument('<agent>', 'Agent slug (e.g., claude-code, gemini-cli) or "custom"')
+  .option('-c, --command <cmd>', 'Override the command to run (required if agent is "custom")')
+  .option('-p, --port <number>', 'Server port', '3000')
+  .option('--rc', 'Show pairing QR code for this session', true)
+  .option('--worktree', 'Run in a temporary git worktree', false)
+  .option('--tunnel', 'Expose the server via a public Cloudflare tunnel', false)
+  .action(async (agentSlug: string, options: { port: string; command?: string; rc: boolean; worktree: boolean; tunnel: boolean }) => {
+    runMigrations();
+    
+    let profile: any;
+    if (agentSlug === 'custom') {
+      if (!options.command) {
+        console.error(chalk.red('Error: --command is required when using "custom" agent.'));
+        process.exit(1);
+      }
+      profile = {
+        id: 'custom',
+        name: 'Custom Agent',
+        slug: 'custom',
+        command: options.command.split(' ')[0],
+        args_json: JSON.stringify(options.command.split(' ').slice(1)),
+        env_json: '{}'
+      };
+    } else {
+      profile = db.prepare('SELECT * FROM agent_profiles WHERE slug = ?').get(agentSlug) as any;
+      if (!profile) {
+        console.error(chalk.red(`Error: Agent profile "${agentSlug}" not found.`));
+        console.log(chalk.gray('Use "cloudcode profiles" to see available agents.'));
+        process.exit(1);
+      }
+    }
+
+    const admin = getFirstAdminUser();
+    if (!admin) {
+      console.error(chalk.red('Error: No admin user found. Please run "cloudcode start" and bootstrap first.'));
+      process.exit(1);
+    }
+
+    const port = parseInt(options.port, 10);
+    // Use a unique socket for this run to avoid conflicts
+    const sidecarSocketPath = join(tmpdir(), `cloudcode-pty-${Date.now()}.sock`);
+
+    console.log(chalk.blue(`\n🚀 Launching ${profile.name} and starting server...`));
+    
+    try {
+      let tunnelUrl = '';
+      if (options.tunnel) {
+        console.log(chalk.magenta('☁️  Opening Cloudflare tunnel...'));
+        const tunnel = await startTunnel(port);
+        tunnelUrl = tunnel.url;
+        console.log(chalk.green(`✅ Public Tunnel URL: ${chalk.underline(tunnelUrl)}`));
+      }
+
+      await startServer({ port, host: '0.0.0.0', sidecarSocketPath });
+      
+      const session = await createSession({
+        title: `CLI: ${profile.name}`,
+        agentProfileId: profile.id,
+        userId: admin.id,
+        workdir: process.cwd(),
+        isWorktree: options.worktree,
+      });
+
+      if (options.rc) {
+        await showPairingInfo(port, session.tmuxSessionName, tunnelUrl);
+      }
+
+      console.log(chalk.yellow(`\nAttaching to ${profile.name} session... (Ctrl-b d to detach)`));
+      
+      // Attach to the newly created tmux session
+      spawn('tmux', ['attach-session', '-t', session.tmuxSessionName], {
+        stdio: 'inherit'
+      }).on('exit', () => {
+        console.log(chalk.gray('\nDetached from session. Server is still running.'));
+        process.exit(0);
+      });
+
+    } catch (err) {
+      console.error(chalk.red('Failed to run session:'), err);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('profiles')
+  .description('List all available agent profiles')
+  .action(() => {
+    runMigrations();
+    const profiles = db.prepare('SELECT name, slug, command FROM agent_profiles').all() as any[];
+    
+    console.log(chalk.blue.bold('\n🤖 Available CloudCode Agents:'));
+    profiles.forEach(p => {
+      console.log(`${chalk.green('•')} ${chalk.bold(p.name)} (${chalk.cyan(p.slug)}) — ${chalk.dim(p.command)}`);
+    });
+    console.log(chalk.gray('\nYou can run any of these with: ') + chalk.white(`cloudcode run <slug> --rc`));
+  });
+
+program
+  .command('share')
+  .description('Generate a pairing QR code for the current tmux session')
+  .option('-p, --port <number>', 'Server port', '3000')
+  .action(async (options: { port: string }) => {
+    const tmuxSession = process.env.TMUX;
+    if (!tmuxSession) {
+      console.error(chalk.red('Error: You are not inside a tmux session.'));
+      process.exit(1);
+    }
+
+    // Extract session name from TMUX env var (format: /tmp/tmux-1000/default,1234,0)
+    // But better to just ask tmux for the current session name
+    let sessionName = '';
+    try {
+      sessionName = execSync('tmux display-message -p "#S"', { encoding: 'utf8' }).trim();
+    } catch (err) {
+      console.error(chalk.red('Error: Could not determine current tmux session.'));
+      process.exit(1);
+    }
+
+    console.log(chalk.blue(`\n📢 Sharing session: ${chalk.bold(sessionName)}`));
+    await showPairingInfo(parseInt(options.port, 10), sessionName);
+  });
+async function showPairingInfo(port: number, sessionName?: string, tunnelUrl?: string) {
+  let remoteUrl = '';
+
+  if (tunnelUrl) {
+    remoteUrl = tunnelUrl;
+  } else {
+    // Try to find the tailscale binary in common locations
+    const tailscalePaths = ['tailscale', '/usr/local/bin/tailscale', '/Applications/Tailscale.app/Contents/Resources/bin/tailscale'];
+    let tsBin = 'tailscale';
+
+    for (const p of tailscalePaths) {
+      try {
+        execSync(`${p} version`, { stdio: 'ignore' });
+        tsBin = p;
+        break;
+      } catch {}
+    }
+
+    try {
+      // 1. Try to get the Tailscale IP directly first (fastest and most reliable)
+      const ip = execSync(`${tsBin} ip -4`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      if (ip) {
+        // 2. Try to get MagicDNS name if available
+        const status = JSON.parse(execSync(`${tsBin} status --json`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+        const self = status.Self;
+        if (self && self.DNSName) {
+          const dnsName = self.DNSName.endsWith('.') ? self.DNSName.slice(0, -1) : self.DNSName;
+          remoteUrl = `http://${dnsName}:${port}`;
+        } else {
+          remoteUrl = `http://${ip}:${port}`;
+        }
+      }
+    } catch (err) {
+      // Tailscale CLI failed, scan network interfaces directly
+      const nets = networkInterfaces();
+      let fallbackIp = '';
+      
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]!) {
+          if (net.family === 'IPv4' && !net.internal) {
+            // Prioritize Tailscale IP range (100.64.0.0/10)
+            if (net.address.startsWith('100.')) {
+              remoteUrl = `http://${net.address}:${port}`;
+              break;
+            }
+            if (!fallbackIp) fallbackIp = net.address;
+          }
+        }
+        if (remoteUrl) break;
+      }
+      
+      if (!remoteUrl && fallbackIp) {
+        remoteUrl = `http://${fallbackIp}:${port}`;
+      }
+    }
+  }
+
+  const admin = getFirstAdminUser();
+  if (!admin) return;
+
+  const token = createPairingToken(admin.id);
+  const baseUrl = remoteUrl || `http://localhost:${port}`;
+  let pairingUrl = `${baseUrl}/pair?token=${token}`;
+
+  if (remoteUrl) {
+    console.log(chalk.dim(`\n📡 Detected network address: ${remoteUrl}`));
+  }
+  
+  if (sessionName) {
+    pairingUrl += `&next=/sessions/mirror/${encodeURIComponent(sessionName)}`;
+  }
+
+  console.log(chalk.cyan('\n📱 Scan to pair and control this session:'));
+  qrcode.generate(pairingUrl, { small: true });
+  console.log(chalk.bold.underline(pairingUrl));
+}
+
+program.parse(process.argv);

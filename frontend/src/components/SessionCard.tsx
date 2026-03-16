@@ -56,6 +56,7 @@ export function SessionCard({ session, onRefresh }: SessionCardProps) {
       onRefresh()
     } catch (err) {
       console.error('Stop failed', err)
+      alert(err instanceof Error ? err.message : 'Stop failed')
     }
   }
 
@@ -67,6 +68,7 @@ export function SessionCard({ session, onRefresh }: SessionCardProps) {
       onRefresh()
     } catch (err) {
       console.error('Kill failed', err)
+      alert(err instanceof Error ? err.message : 'Kill failed')
     }
   }
 
@@ -75,7 +77,24 @@ export function SessionCard({ session, onRefresh }: SessionCardProps) {
     navigate(`/sessions/${session.publicId}`)
   }
 
-  const workdirDisplay = session.workdir.length > 35
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const message = session.status === 'running' || session.status === 'starting'
+      ? 'Delete this session? This will terminate the running process and remove its history.'
+      : 'Delete this session and its snapshots permanently?'
+
+    if (!confirm(message)) return
+
+    try {
+      await apiFetch(`/api/v1/sessions/${session.publicId}`, { method: 'DELETE' })
+      onRefresh()
+    } catch (err) {
+      console.error('Delete failed', err)
+      alert(err instanceof Error ? err.message : 'Delete failed')
+    }
+  }
+
+  const workdirDisplay = session.workdir?.length > 35
     ? '...' + session.workdir.slice(-32)
     : session.workdir
 
@@ -105,13 +124,26 @@ export function SessionCard({ session, onRefresh }: SessionCardProps) {
             <h3 className="font-bold text-zinc-100 text-lg leading-tight truncate tracking-tight">{session.title}</h3>
           </div>
           
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
               <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
               {session.agentProfile?.name ?? session.agentProfileId}
             </div>
+            
+            {session.gitInfo && (
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-2 py-0.5 rounded-md border border-zinc-800">
+                <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                <span className="text-[10px] font-bold text-zinc-400 font-mono">
+                  {session.gitInfo.branch}
+                  {session.gitInfo.isDirty && <span className="ml-1 text-amber-500">●</span>}
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-mono italic">
               <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -145,14 +177,31 @@ export function SessionCard({ session, onRefresh }: SessionCardProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+              <button
+                onClick={handleDelete}
+                className="flex items-center justify-center w-10 h-10 bg-zinc-950/60 hover:bg-zinc-800 text-zinc-500 hover:text-rose-400 rounded-xl transition-all tap-feedback border border-zinc-800"
+                title="Delete Session"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+                </svg>
+              </button>
             </>
           ) : (
-            <button
-              onClick={handleOpen}
-              className="flex items-center justify-center px-6 h-10 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl transition-all tap-feedback border border-zinc-700/50"
-            >
-              Resume
-            </button>
+            <>
+              <button
+                onClick={handleDelete}
+                className="flex items-center justify-center px-4 h-10 bg-zinc-950/60 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 text-xs font-bold rounded-xl transition-all tap-feedback border border-zinc-800"
+              >
+                Delete
+              </button>
+              <button
+                onClick={handleOpen}
+                className="flex items-center justify-center px-6 h-10 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl transition-all tap-feedback border border-zinc-700/50"
+              >
+                Resume
+              </button>
+            </>
           )}
           <button
             onClick={handleOpen}

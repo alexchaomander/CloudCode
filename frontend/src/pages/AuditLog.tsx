@@ -1,176 +1,148 @@
 import { useState, useEffect, useCallback } from 'react'
-import { AuditLog as AuditLogEntry } from '../types'
+import type { AuditLog as AuditLogType } from '../types'
 import { apiFetch } from '../hooks/useApi'
 
-const REFRESH_INTERVAL_MS = 30_000
-const PAGE_SIZE = 50
-
-function formatTime(dateStr: string): string {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  if (isToday) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+interface AuditResponse {
+  entries: AuditLogType[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
   }
-  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function eventTypeColor(eventType: string): string {
-  if (eventType.includes('delete') || eventType.includes('kill') || eventType.includes('error')) {
-    return 'text-red-400'
-  }
-  if (eventType.includes('create') || eventType.includes('start')) {
-    return 'text-green-400'
-  }
-  if (eventType.includes('update') || eventType.includes('login') || eventType.includes('stop')) {
-    return 'text-yellow-400'
-  }
-  return 'text-blue-400'
 }
 
 export function AuditLog() {
-  const [entries, setEntries] = useState<AuditLogEntry[]>([])
+  const [entries, setEntries] = useState<AuditLogType[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const [pagination, setPagination] = useState<AuditResponse['pagination'] | null>(null)
 
-  const fetchEntries = useCallback(async (reset = false) => {
-    const currentPage = reset ? 1 : page
-    if (!reset) setLoadingMore(true)
-    else setLoading(true)
-
+  const fetchAuditLogs = useCallback(async (pageNum: number) => {
+    setLoading(true)
     try {
-      const data = await apiFetch<{ entries: AuditLogEntry[]; pagination: { pages: number } }>(
-        `/api/v1/audit?limit=${PAGE_SIZE}&page=${currentPage}`
-      )
-      const newEntries = data.entries
-      if (reset) {
-        setEntries(newEntries)
-        setPage(2)
-      } else {
-        setEntries(prev => [...prev, ...newEntries])
-        setPage(prev => prev + 1)
-      }
-      setHasMore(newEntries.length === PAGE_SIZE)
+      const data = await apiFetch<AuditResponse>(`/api/v1/audit?page=${pageNum}&limit=50`)
+      setEntries(data.entries)
+      setPagination(data.pagination)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit log')
+      setError(err instanceof Error ? err.message : 'Failed to load audit logs')
     } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
-  }, [page])
-
-  useEffect(() => {
-    fetchEntries(true)
-    const interval = setInterval(() => fetchEntries(true), REFRESH_INTERVAL_MS)
-    return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLoadMore = () => {
-    fetchEntries(false)
+  useEffect(() => {
+    fetchAuditLogs(page)
+  }, [page, fetchAuditLogs])
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString()
   }
 
   return (
-    <div className="px-4 py-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-100">Audit Log</h2>
-        <button
-          onClick={() => fetchEntries(true)}
-          className="p-2 text-gray-400 hover:text-gray-200 rounded-md min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
-          title="Refresh"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
+    <div className="px-4 py-6 space-y-8 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Audit Log</h1>
+        <p className="text-zinc-500 text-sm font-medium">System activity and security tracking</p>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      {error ? (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center">
+          <p className="text-rose-400 text-sm font-bold tracking-tight">{error}</p>
         </div>
-      ) : error ? (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-4 text-red-300 text-sm">
-          {error}
-        </div>
-      ) : entries.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-400">No audit events yet</p>
+      ) : loading && entries.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Scanning Logs...</span>
         </div>
       ) : (
-        <>
-          <div className="space-y-1">
-            {entries.map(entry => (
-              <div
-                key={entry.id}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs font-mono font-semibold ${eventTypeColor(entry.eventType)}`}>
-                        {entry.eventType}
-                      </span>
-                      {entry.targetType && (
-                        <span className="text-xs text-gray-400 font-mono">
-                          {entry.targetType}
-                          {entry.targetId && (
-                            <span className="text-gray-600">:{entry.targetId.slice(0, 8)}</span>
-                          )}
+        <div className="space-y-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-zinc-950 border-b border-zinc-800">
+                    <th className="px-5 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Time</th>
+                    <th className="px-5 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Actor</th>
+                    <th className="px-5 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Event</th>
+                    <th className="px-5 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Target</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {entries.map(entry => (
+                    <tr key={entry.id} className="hover:bg-zinc-950/50 transition-colors">
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <div className="text-[11px] text-zinc-400 font-mono">
+                          {formatDate(entry.createdAt)}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-400">
+                            {entry.actorUsername?.charAt(0).toUpperCase() || '?'}
+                          </div>
+                          <span className="text-xs font-bold text-zinc-200">{entry.actorUsername || 'System'}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                          entry.eventType.includes('error') || entry.eventType.includes('fail')
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                            : entry.eventType.includes('create') || entry.eventType.includes('login')
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                        }`}>
+                          {entry.eventType.replace(/\./g, ' ')}
                         </span>
-                      )}
-                    </div>
-                    {entry.actorUserId && (
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        by <span className="text-gray-400 font-mono">{entry.actorUserId.slice(0, 8)}</span>
-                      </p>
-                    )}
-                    {entry.metadataJson && entry.metadataJson !== 'null' && (
-                      <details className="mt-1">
-                        <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-400">metadata</summary>
-                        <pre className="text-xs text-gray-500 mt-1 font-mono whitespace-pre-wrap break-all">
-                          {(() => {
-                            try {
-                              return JSON.stringify(JSON.parse(entry.metadataJson!), null, 2)
-                            } catch {
-                              return entry.metadataJson
-                            }
-                          })()}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-                    {formatTime(entry.createdAt)}
-                  </span>
-                </div>
-              </div>
-            ))}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-col gap-1 min-w-[120px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{entry.targetType || '-'}</span>
+                            {entry.targetId && (
+                              <span className="text-[10px] font-mono text-zinc-500">#{entry.targetId.slice(0, 8)}</span>
+                            )}
+                          </div>
+                          {entry.metadata && (
+                            <div className="mt-1">
+                              <pre className="text-[10px] text-zinc-500 font-mono bg-black/30 p-2 rounded border border-zinc-800/50 whitespace-pre-wrap break-all max-w-xs">
+                                {JSON.stringify(entry.metadata, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {hasMore && (
-            <button
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              className="w-full mt-4 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-sm rounded-lg min-h-[48px] transition-colors flex items-center justify-center gap-2"
-            >
-              {loadingMore ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                  Loading...
-                </>
-              ) : 'Load More'}
-            </button>
+          {pagination && pagination.pages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-4">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-zinc-400 disabled:opacity-30 hover:text-zinc-100 transition-all tap-feedback"
+              >
+                Previous
+              </button>
+              <div className="px-4 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                Page {page} of {pagination.pages}
+              </div>
+              <button
+                disabled={page === pagination.pages}
+                onClick={() => setPage(p => p + 1)}
+                className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-zinc-400 disabled:opacity-30 hover:text-zinc-100 transition-all tap-feedback"
+              >
+                Next
+              </button>
+            </div>
           )}
-
-          <p className="text-center text-xs text-gray-600 mt-4">
-            Auto-refreshes every 30s · Showing {entries.length} events
-          </p>
-        </>
+        </div>
       )}
     </div>
   )

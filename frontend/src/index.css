@@ -12,7 +12,7 @@
     @apply bg-zinc-950 text-zinc-100 antialiased;
   }
 
-  /* Custom scrollbar for a more integrated look */
+  /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -27,29 +27,44 @@
   }
 }
 
-/* xterm.js container styles with theme matching */
+/* xterm.js container styles */
 .xterm-container {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  @apply bg-black;
 }
 
 .xterm-container .xterm {
   height: 100%;
-  padding: 8px;
+  padding: 0; /* Padding here breaks character grid calculations */
 }
 
 .xterm-container .xterm-viewport {
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 /* Terminal Cursor Glow */
 .xterm-cursor {
-  @apply drop-shadow-[0_0_5px_rgba(56,189,248,0.5)];
+  @apply drop-shadow-[0_0_8px_rgba(99,102,241,0.8)] !important;
 }
 
-/* Haptic-like tap feedback for mobile */
+/* Haptic-like tap feedback */
 .tap-feedback {
   @apply active:scale-[0.98] transition-transform duration-75;
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  @apply bg-zinc-900/40 backdrop-blur-xl border border-white/5 shadow-2xl;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

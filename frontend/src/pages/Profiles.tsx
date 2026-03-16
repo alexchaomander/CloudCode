@@ -8,11 +8,11 @@ interface ProfileFormData {
   name: string
   slug: string
   command: string
-  argsJson: string
-  envJson: string
+  args: string[]
+  env: Record<string, string>
   defaultWorkdir: string
   startupTemplate: string
-  stopMethod: StopMethod
+  stopMethod: string
   supportsInteractiveInput: boolean
 }
 
@@ -20,11 +20,11 @@ const defaultFormData: ProfileFormData = {
   name: '',
   slug: '',
   command: '',
-  argsJson: '[]',
-  envJson: '{}',
+  args: [],
+  env: {},
   defaultWorkdir: '',
   startupTemplate: '',
-  stopMethod: 'graceful',
+  stopMethod: 'ctrl_c',
   supportsInteractiveInput: true,
 }
 
@@ -42,6 +42,8 @@ interface ProfileFormProps {
 
 function ProfileForm({ initial = {}, onSave, onCancel, saving, error }: ProfileFormProps) {
   const [form, setForm] = useState<ProfileFormData>({ ...defaultFormData, ...initial })
+  const [argsText, setArgsText] = useState(JSON.stringify(initial.args || [], null, 2))
+  const [envText, setEnvText] = useState(JSON.stringify(initial.env || {}, null, 2))
 
   const set = (key: keyof ProfileFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const value = e.target.type === 'checkbox'
@@ -55,9 +57,13 @@ function ProfileForm({ initial = {}, onSave, onCancel, saving, error }: ProfileF
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    try { JSON.parse(form.argsJson) } catch { alert('Args JSON is invalid'); return }
-    try { JSON.parse(form.envJson) } catch { alert('Env JSON is invalid'); return }
-    await onSave(form)
+    try { 
+      const args = JSON.parse(argsText)
+      const env = JSON.parse(envText)
+      await onSave({ ...form, args, env })
+    } catch { 
+      alert('JSON formatting error in Args or Env'); 
+    }
   }
 
   return (
@@ -97,18 +103,16 @@ function ProfileForm({ initial = {}, onSave, onCancel, saving, error }: ProfileF
           className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50 transition-all font-mono"
           placeholder="e.g. claude or /usr/bin/python3"
         />
-        <p className="mt-1.5 ml-1 text-[10px] text-zinc-600 italic">The binary must be in your system PATH or use an absolute path.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 ml-1">Arguments (JSON Array)</label>
-          <input
-            type="text"
-            value={form.argsJson}
-            onChange={set('argsJson')}
-            className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50 transition-all font-mono"
-            placeholder='["--arg1", "val"]'
+          <textarea
+            value={argsText}
+            onChange={e => setArgsText(e.target.value)}
+            rows={3}
+            className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50 transition-all font-mono resize-none"
           />
         </div>
         <div>
@@ -126,11 +130,10 @@ function ProfileForm({ initial = {}, onSave, onCancel, saving, error }: ProfileF
       <div>
         <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 ml-1">Environment Variables (JSON Object)</label>
         <textarea
-          value={form.envJson}
-          onChange={set('envJson')}
-          rows={2}
+          value={envText}
+          onChange={e => setEnvText(e.target.value)}
+          rows={3}
           className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50 transition-all font-mono resize-none"
-          placeholder='{"API_KEY": "..."}'
         />
       </div>
 
@@ -334,11 +337,11 @@ export function Profiles() {
                       name: profile.name,
                       slug: profile.slug,
                       command: profile.command,
-                      argsJson: profile.argsJson,
-                      envJson: profile.envJson,
+                      args: profile.args,
+                      env: profile.env,
                       defaultWorkdir: profile.defaultWorkdir ?? '',
                       startupTemplate: profile.startupTemplate ?? '',
-                      stopMethod: profile.stopMethod as StopMethod,
+                      stopMethod: profile.stopMethod,
                       supportsInteractiveInput: profile.supportsInteractiveInput,
                     }}
                     onSave={(data) => handleEdit(profile.id, data)}

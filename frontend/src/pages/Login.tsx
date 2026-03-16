@@ -1,15 +1,16 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuthContext } from '../hooks/useAuth'
 import { apiFetch } from '../hooks/useApi'
 
 export function Login() {
-  const { login, isAuthenticated, isLoading } = useAuth()
+  const { login, isAuthenticated, isLoading } = useAuthContext()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [needsBootstrap, setNeedsBootstrap] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -20,11 +21,11 @@ export function Login() {
     if (!isLoading && !isAuthenticated) {
       apiFetch<{ needsBootstrap: boolean }>('/api/v1/auth/bootstrap-status')
         .then(res => {
-          if (res.needsBootstrap) {
-            navigate('/bootstrap', { replace: true })
-          }
+          setNeedsBootstrap(res.needsBootstrap)
         })
-        .catch(() => {})
+        .catch(() => {
+          setNeedsBootstrap(false)
+        })
     }
   }, [isLoading, isAuthenticated, navigate])
 
@@ -42,7 +43,7 @@ export function Login() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading || needsBootstrap === null) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -63,74 +64,102 @@ export function Login() {
           <p className="text-zinc-500 font-medium tracking-tight">Your terminal, everywhere.</p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden group">
-          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
-          
-          <form onSubmit={handleSubmit} className="space-y-6 relative">
-            <div>
-              <label htmlFor="username" className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 ml-1">
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                required
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                className="w-full px-5 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200"
-                placeholder="Enter username"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 ml-1">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full px-5 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200"
-                placeholder="••••••••"
-              />
-            </div>
-
-            {error && (
-              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 text-xs font-bold flex items-center gap-2 animate-shake">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        {needsBootstrap ? (
+          <div className="bg-zinc-900 border border-emerald-500/30 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden group text-center">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+            
+            <div className="mb-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-full mb-4">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                {error}
               </div>
-            )}
+              <h2 className="text-xl font-bold text-white mb-2">Ready for Setup</h2>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                CloudCode is installed and ready. Since this is a new installation, you need to create the first administrator account.
+              </p>
+            </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:bg-indigo-900 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all duration-200 flex items-center justify-center gap-2 group"
+            <Link
+              to="/bootstrap"
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold rounded-2xl shadow-xl shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 group"
             >
-              {submitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span className="uppercase tracking-widest text-[10px]">Verifying...</span>
-                </>
-              ) : (
-                <>
-                  <span className="uppercase tracking-widest text-[10px]">Sign In</span>
-                  <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              <span className="uppercase tracking-widest text-[10px]">Start Setup</span>
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden group">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+            
+            <form onSubmit={handleSubmit} className="space-y-6 relative">
+              <div>
+                <label htmlFor="username" className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 ml-1">
+                  Username
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  required
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  className="w-full px-5 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200"
+                  placeholder="Enter username"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 ml-1">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full px-5 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all duration-200"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              {error && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 text-xs font-bold flex items-center gap-2">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </>
+                  {error}
+                </div>
               )}
-            </button>
-          </form>
-        </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:bg-indigo-900 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all duration-200 flex items-center justify-center gap-2 group"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="uppercase tracking-widest text-[10px]">Verifying...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="uppercase tracking-widest text-[10px]">Sign In</span>
+                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
         
         <p className="mt-8 text-center text-zinc-600 text-[10px] font-bold uppercase tracking-[0.2em]">
           Mobile First · Self Hosted · Secure

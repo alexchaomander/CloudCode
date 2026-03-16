@@ -15,10 +15,24 @@ vi.mock('./tmux/adapter.js', () => ({
   killSession: vi.fn().mockResolvedValue(undefined),
   sendCtrlC: vi.fn().mockResolvedValue(undefined),
   sendKeys: vi.fn().mockResolvedValue(undefined),
+  sendLiteralText: vi.fn().mockResolvedValue(undefined),
+  sendEnter: vi.fn().mockResolvedValue(undefined),
   hasSession: vi.fn().mockResolvedValue(true),
   listSessions: vi.fn().mockResolvedValue([]),
   capturePane: vi.fn().mockResolvedValue('test output'),
   resizeWindow: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('./terminal/sidecar-manager.js', () => ({
+  sidecarManager: {
+    start: vi.fn().mockResolvedValue(undefined),
+    openStream: vi.fn().mockResolvedValue({
+      resize: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    }),
+    stop: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 describe('API Integration', () => {
@@ -74,7 +88,7 @@ describe('API Integration', () => {
       method: 'POST',
       url: '/api/v1/repos',
       headers: { cookie: cookieHeader },
-      payload: { label: 'Test Repo', absolute_path: os.tmpdir() }
+      payload: { label: 'Test Repo', absolutePath: os.tmpdir() }
     });
     expect(res.statusCode).toBe(201);
     const repoId = res.json().repo.id;
@@ -91,14 +105,14 @@ describe('API Integration', () => {
       headers: { cookie: cookieHeader },
       payload: {
         title: 'Integration Test Session',
-        agent_profile_id: profileId,
-        repo_root_id: repoId,
+        agentProfileId: profileId,
+        repoRootId: repoId,
         workdir: '.'
       }
     });
     expect(res.statusCode).toBe(201);
     const sessionId = res.json().session.id;
-    const publicId = res.json().session.public_id;
+    const publicId = res.json().session.publicId;
     expect(tmux.createSession).toHaveBeenCalled();
 
     // 6. Create a snapshot
@@ -135,6 +149,22 @@ describe('API Integration', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().entries.length).toBeGreaterThan(0);
+
+    // 10. Delete session
+    res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/sessions/${publicId}`,
+      headers: { cookie: cookieHeader }
+    });
+    expect(res.statusCode).toBe(200);
+
+    // 11. Verify session is gone
+    res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sessions/${publicId}`,
+      headers: { cookie: cookieHeader }
+    });
+    expect(res.statusCode).toBe(404);
   });
 
   it('enforces authentication', async () => {

@@ -1,136 +1,66 @@
-# CloudCode Installation Guide
+# Installation Guide
 
-This guide will help you set up CloudCode on your workstation. CloudCode is designed to be self-hosted on a Linux or macOS machine and accessed securely, primarily over a [Tailscale](https://tailscale.com) network.
+CloudCode can be installed as a global CLI on your system.
 
 ## Prerequisites
 
-- **OS**: Linux (Ubuntu/Debian recommended) or macOS.
-- **Node.js**: Version 22.0 or higher.
-- **tmux**: Required for persistent session management.
-- **Coding Agents**: At least one agent CLI (e.g., `claude`, `gemini`, `codex`, `copilot`) should be installed and in your system `PATH`.
-- **Tailscale**: (Optional but strongly recommended) For secure remote access from your phone.
+- **Node.js**: v22 or higher
+- **Go**: v1.22 or higher (to build the PTY sidecar)
+- **tmux**: Installed and in your PATH
+- **git**: For worktree support
+- **Tailscale** (Optional): For private remote access
+- **cloudflared** (Optional): For public remote access without a VPN
 
----
-
-## Quick Start
-
-### 1. Clone the repository
+## Step 1: Clone and Build
 
 ```bash
 git clone https://github.com/alexchaomander/CloudCode.git
 cd CloudCode
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
 ```
 
-### 3. Configure environment
+## Step 2: Global Installation (The One-Command Way)
+
+From the root directory, run:
 
 ```bash
-cp .env.example .env
+npm run install:cli
 ```
 
-Edit the `.env` file and set a secure `SESSION_SECRET`. You can generate one with:
-```bash
-openssl rand -hex 64
-```
+This command will:
+1.  Build the Backend (TypeScript)
+2.  Build the PTY Sidecar (Go)
+3.  Build the Frontend (React)
+4.  Bundle everything together
+5.  Install the `cloudcode` command globally on your machine
 
-### 4. Initialize Database
+## Step 3: Verify Installation
 
-Run the migrations to set up the SQLite database and seed the default agent profiles:
-```bash
-npm run migrate
-```
-
-### 5. Build the application
-
-Build both the backend and the frontend:
-```bash
-npm run build
-```
-
-### 6. Start CloudCode
+Check if the command is available from **any** directory:
 
 ```bash
-npm start
+cloudcode --version
 ```
 
-CloudCode will be listening on `http://0.0.0.0:3000` (or the port specified in your `.env`).
+## Step 4: First-time Setup (Bootstrap)
 
-### 7. Bootstrap Admin Account
+Start the server locally to create your admin account:
 
-Open `http://localhost:3000/bootstrap` in your browser to create your initial admin account. After bootstrapping, you can log in at `http://localhost:3000/login`.
+```bash
+cloudcode start
+```
+
+1. Open `http://localhost:3000` in your browser.
+2. Follow the instructions to create your first admin user.
+3. You are now ready to use all `cloudcode` commands!
 
 ---
 
-## Running as a systemd Service (Linux)
+## Updating CloudCode
 
-To keep CloudCode running in the background and start it automatically on boot, we recommend using `systemd`.
-
-### 1. Configure the service file
-
-The repository includes a `cloudcode.service` file. By default, it expects CloudCode to be located in `/opt/cloudcode`.
+To update to the latest version:
 
 ```bash
-# Copy the project to /opt
-sudo mkdir -p /opt/cloudcode
-sudo cp -rv . /opt/cloudcode/
-sudo chown -R $USER:$USER /opt/cloudcode
-
-# Copy the service file
-sudo cp cloudcode.service /etc/systemd/system/cloudcode@.service
+git pull
+npm run install:cli
 ```
-
-### 2. Enable and start the service
-
-Replace `$USER` with your actual Linux username:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable cloudcode@$USER
-sudo systemctl start cloudcode@$USER
-```
-
-### 3. Monitor logs
-
-```bash
-journalctl -u cloudcode@$USER -f
-```
-
----
-
-## Verifying Dependencies
-
-### tmux
-
-CloudCode requires `tmux` 3.0 or later.
-```bash
-tmux -V
-```
-
-### Agent CLIs
-
-Verify that CloudCode can find your agents:
-```bash
-which claude   # Claude Code
-which gemini   # Gemini CLI
-which copilot  # GitHub Copilot CLI
-```
-
-For detailed agent setup and authentication, see [docs/agents.md](agents.md).
-
----
-
-## Troubleshooting
-
-### Port Conflicts
-If port 3000 is taken, update the `PORT` variable in your `.env` file.
-
-### Permissions
-If you get database errors, ensure the directory containing your `DATABASE_PATH` (default `./data/`) is writable by the user running the process.
-
-### Environment in tmux
-If your agent CLIs require specific environment variables (like `ANTHROPIC_API_KEY`), ensure they are exported in your shell before starting CloudCode, or add them to the `.env` file. CloudCode passes its environment to the tmux sessions it creates.

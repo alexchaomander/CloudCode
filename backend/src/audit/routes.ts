@@ -10,9 +10,9 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
     const querySchema = z.object({
       page: z.coerce.number().int().min(1).default(1),
       limit: z.coerce.number().int().min(1).max(200).default(50),
-      event_type: z.string().optional(),
-      actor_user_id: z.string().optional(),
-      target_type: z.string().optional(),
+      eventType: z.string().optional(),
+      actorUserId: z.string().optional(),
+      targetType: z.string().optional(),
     });
 
     const parseResult = querySchema.safeParse(request.query);
@@ -23,23 +23,23 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    const { page, limit, event_type, actor_user_id, target_type } = parseResult.data;
+    const { page, limit, eventType, actorUserId, targetType } = parseResult.data;
     const offset = (page - 1) * limit;
 
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    if (event_type) {
+    if (eventType) {
       conditions.push('a.event_type = ?');
-      bindings.push(event_type);
+      bindings.push(eventType);
     }
-    if (actor_user_id) {
+    if (actorUserId) {
       conditions.push('a.actor_user_id = ?');
-      bindings.push(actor_user_id);
+      bindings.push(actorUserId);
     }
-    if (target_type) {
+    if (targetType) {
       conditions.push('a.target_type = ?');
-      bindings.push(target_type);
+      bindings.push(targetType);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -67,13 +67,13 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
 
     const entries = rows.map((row) => ({
       id: row.id,
-      actor_user_id: row.actor_user_id,
-      actor_username: row.actor_username,
-      event_type: row.event_type,
-      target_type: row.target_type,
-      target_id: row.target_id,
+      actorUserId: row.actor_user_id,
+      actorUsername: row.actor_username,
+      eventType: row.event_type,
+      targetType: row.target_type,
+      targetId: row.target_id,
       metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
-      created_at: row.created_at,
+      createdAt: row.created_at,
     }));
 
     return reply.send({

@@ -13,13 +13,16 @@ import profileRoutes from './profiles/routes.js';
 import repoRoutes from './repos/routes.js';
 import sessionRoutes from './sessions/routes.js';
 import terminalRoutes from './terminal/routes.js';
+import mirrorRoutes from './terminal/mirror-routes.js';
 import settingsRoutes from './settings/routes.js';
 import { syncSessionStatus } from './sessions/service.js';
+import { sidecarManager } from './terminal/sidecar-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export async function buildApp(opts = {}) {
+export async function buildApp(opts: any = {}) {
+  const { sidecarSocketPath, ...fastifyOpts } = opts;
   const fastify = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : {
       transport: process.env.NODE_ENV !== 'production'
@@ -34,7 +37,21 @@ export async function buildApp(opts = {}) {
         : undefined,
       level: process.env.LOG_LEVEL ?? 'info',
     },
-    ...opts,
+    ...fastifyOpts,
+  });
+
+  // Debug: Log all incoming requests
+  fastify.addHook('onRequest', async (request) => {
+    fastify.log.info({ 
+      method: request.method, 
+      url: request.url, 
+      ip: request.ip,
+      headers: {
+        host: request.headers.host,
+        origin: request.headers.origin,
+        'user-agent': request.headers['user-agent']
+      }
+    }, 'Incoming Request');
   });
 
   const SESSION_SECRET = process.env.SESSION_SECRET ?? 'cloudcode-default-secret-change-in-production';
@@ -75,7 +92,7 @@ export async function buildApp(opts = {}) {
 
   // Register CORS
   await fastify.register(cors, {
-    origin: process.env.APP_BASE_URL ?? true,
+    origin: true, // Allow all origins in dev/local network mode
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   });
@@ -94,17 +111,25 @@ export async function buildApp(opts = {}) {
   });
 
   // Register route plugins
+  await sidecarManager.start(sidecarSocketPath);
   await fastify.register(authRoutes);
   await fastify.register(auditRoutes);
   await fastify.register(profileRoutes);
   await fastify.register(repoRoutes);
   await fastify.register(sessionRoutes);
   await fastify.register(terminalRoutes);
+  await fastify.register(mirrorRoutes);
   await fastify.register(settingsRoutes);
 
-  // Serve frontend static files if the build exists
-  const frontendDistPath = join(__dirname, '..', '..', 'frontend', 'dist');
-  if (existsSync(frontendDistPath)) {
+  // Serve frontend static files
+  const possibleFrontendPaths = [
+    join(__dirname, '..', '..', 'frontend', 'dist'), // Dev path
+    join(__dirname, '..', 'frontend-dist'),         // Shipped package path
+  ];
+  
+  const frontendDistPath = possibleFrontendPaths.find(p => existsSync(p));
+
+  if (frontendDistPath) {
     await fastify.register(staticPlugin, {
       root: frontendDistPath,
       prefix: '/',
@@ -118,7 +143,7 @@ export async function buildApp(opts = {}) {
       return reply.sendFile('index.html', frontendDistPath);
     });
   } else if (process.env.NODE_ENV !== 'test') {
-    fastify.log.warn(`Frontend dist not found at ${frontendDistPath}. Serving API only.`);
+    fastify.log.warn('Frontend dist not found. Serving API only.');
   }
 
   // Health check endpoint
@@ -126,45 +151,30 @@ export async function buildApp(opts = {}) {
     return reply.send({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Global error handler for better debugging
+  fastify.setErrorHandler((error: any, request, reply) => {
+    fastify.log.error({ err: error }, 'GLOBAL ERROR');
+    const statusCode = error.statusCode || 500;
+    
+    reply.status(statusCode).send({
+      error: error.name || 'Internal Server Error',
+      message: error.message || 'An unexpected error occurred',
+      stack: error.stack,
+    });
+  });
+
   return fastify;
 }
 
-// Start the server if this file is run directly
+// Start the server if this file is run directly (legacy support or when using tsx directly)
 const isMain = process.argv[1] === fileURLToPath(import.meta.url) || 
-               process.argv[1] === fileURLToPath(import.meta.url).replace(/\.ts$/, '.js') ||
-               (process.env.NODE_ENV !== 'test' && !process.env.VITEST);
+               process.argv[1] === fileURLToPath(import.meta.url).replace(/\.ts$/, '.js');
 
-if (isMain && process.env.NODE_ENV !== 'test') {
+if (isMain && process.env.NODE_ENV !== 'test' && !process.argv.includes('start')) {
   const PORT = parseInt(process.env.PORT ?? '3000', 10);
   const HOST = process.env.HOST ?? '0.0.0.0';
 
   const app = await buildApp();
-
-  // Periodic session status sync (every 30 seconds)
-  const syncInterval = setInterval(async () => {
-    try {
-      await syncSessionStatus();
-    } catch (err) {
-      app.log.error({ err }, 'Failed to sync session status');
-    }
-  }, 30_000);
-
-  // Graceful shutdown
-  const shutdown = async (signal: string): Promise<void> => {
-    app.log.info(`Received ${signal}, starting graceful shutdown...`);
-    clearInterval(syncInterval);
-    try {
-      await app.close();
-      app.log.info('Server closed successfully');
-      process.exit(0);
-    } catch (err) {
-      app.log.error({ err }, 'Error during shutdown');
-      process.exit(1);
-    }
-  };
-
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
 
   try {
     await app.listen({ port: PORT, host: HOST });

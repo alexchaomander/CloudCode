@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuthContext } from '../hooks/useAuth'
 
 interface LayoutProps {
   children: ReactNode
@@ -28,14 +28,20 @@ const navItems = [
     end: false,
   },
   {
+    to: '/repositories',
+    label: 'Repos',
+    icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
+    end: false,
+  },
+  {
     to: '/profiles',
-    label: 'Profiles',
+    label: 'Agents',
     icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18',
     end: false,
   },
   {
     to: '/audit',
-    label: 'Audit',
+    label: 'Logs',
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
     end: false,
   },
@@ -50,13 +56,14 @@ const navItems = [
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Dashboard',
   '/sessions/new': 'New Session',
-  '/profiles': 'Profiles',
+  '/repositories': 'Repositories',
+  '/profiles': 'Agent Profiles',
   '/audit': 'Audit Log',
   '/settings': 'Settings',
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { logout, user } = useAuth()
+  const { logout, user } = useAuthContext()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -83,7 +90,7 @@ export function Layout({ children }: LayoutProps) {
           {pageTitle !== 'CloudCode' && (
             <>
               <span className="text-zinc-700 font-light">/</span>
-              <span className="text-zinc-400 text-xs font-medium uppercase tracking-wider truncate max-w-[120px]">{pageTitle}</span>
+              <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest truncate max-w-[120px]">{pageTitle}</span>
             </>
           )}
         </div>

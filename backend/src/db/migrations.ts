@@ -69,7 +69,8 @@ export function runMigrations(): void {
       stopped_at TEXT,
       last_output_at TEXT,
       pinned INTEGER NOT NULL DEFAULT 0,
-      archived INTEGER NOT NULL DEFAULT 0
+      archived INTEGER NOT NULL DEFAULT 0,
+      worktree_path TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
@@ -87,6 +88,15 @@ export function runMigrations(): void {
 
     CREATE INDEX IF NOT EXISTS idx_snapshots_session ON session_snapshots(session_id);
 
+    CREATE TABLE IF NOT EXISTS pairing_tokens (
+      token TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pairing_tokens_expires ON pairing_tokens(expires_at);
+
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY NOT NULL,
       actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -102,6 +112,17 @@ export function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
   `);
 
+  // Migration: Add worktree_path to sessions if it doesn't exist
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(sessions)").all() as any[];
+    const hasWorktreePath = tableInfo.some(col => col.name === 'worktree_path');
+    if (!hasWorktreePath) {
+      db.exec("ALTER TABLE sessions ADD COLUMN worktree_path TEXT");
+    }
+  } catch (err) {
+    // Column might already exist or table doesn't exist yet
+  }
+
   // console.log('Tables created successfully.');
 
   // Seed default agent profiles
@@ -111,7 +132,7 @@ export function runMigrations(): void {
     // console.log('Seeding default agent profiles...');
 
     const insertProfile = db.prepare(`
-      INSERT INTO agent_profiles (id, name, slug, command, args_json, env_json, startup_template, stop_method, supports_interactive_input)
+      INSERT OR IGNORE INTO agent_profiles (id, name, slug, command, args_json, env_json, startup_template, stop_method, supports_interactive_input)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 

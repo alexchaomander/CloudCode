@@ -11,22 +11,18 @@ export interface AgentProfile {
   name: string
   slug: string
   command: string
-  argsJson: string
-  envJson: string
+  args: string[]
+  env: Record<string, string>
   defaultWorkdir: string | null
   startupTemplate: string | null
   stopMethod: string
   supportsInteractiveInput: boolean
-  createdAt: string
-  updatedAt: string
 }
 
 export interface RepoRoot {
   id: string
   label: string
   absolutePath: string
-  createdAt: string
-  updatedAt: string
 }
 
 export interface Session {
@@ -37,25 +33,29 @@ export interface Session {
   repoRootId: string | null
   workdir: string
   tmuxSessionName: string
-  status: 'starting' | 'running' | 'stopped' | 'killed' | 'error'
+  status: 'running' | 'starting' | 'stopped' | 'killed' | 'error'
   createdAt: string
-  updatedAt: string
+  lastOutputAt: string | null
   startedAt: string | null
   stoppedAt: string | null
-  lastOutputAt: string | null
   pinned: boolean
   archived: boolean
   agentProfile?: AgentProfile
   repoRoot?: RepoRoot
+  gitInfo?: {
+    branch: string
+    isDirty: boolean
+  }
 }
 
 export interface AuditLog {
   id: string
   actorUserId: string | null
+  actorUsername: string | null
   eventType: string
   targetType: string | null
   targetId: string | null
-  metadataJson: string | null
+  metadata: any | null
   createdAt: string
 }
 
@@ -65,4 +65,16 @@ export interface SessionSnapshot {
   snapshotType: string
   contentText: string
   createdAt: string
+}
+
+export interface DiscoveredProject {
+  name: string
+  absolutePath: string
+  rootId: string
+  rootLabel: string
+  isRoot?: boolean
+  gitInfo?: {
+    branch: string
+    isDirty: boolean
+  }
 }

@@ -43,71 +43,73 @@ export function Settings() {
     }
   }
 
-  const updateSetting = (key: string, value: string) => {
+  const updateSetting = (key: string, value: any) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }))
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="px-4 py-4">
-        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-4 text-red-300 text-sm">
-          {error}
-        </div>
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Loading Preferences...</span>
       </div>
     )
   }
 
   return (
-    <div className="px-4 py-4">
-      <h2 className="text-xl font-bold text-gray-100 mb-6">Settings</h2>
+    <div className="px-4 py-6 space-y-8 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Settings</h1>
+        <p className="text-zinc-500 text-sm font-medium">Application configuration</p>
+      </div>
 
-      {settings && Object.keys(settings).length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-8 text-center">
-          <p className="text-gray-400 text-sm">No configurable settings available</p>
+      {error ? (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center">
+          <p className="text-rose-400 text-sm font-bold tracking-tight">{error}</p>
         </div>
       ) : (
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg divide-y divide-gray-700">
-            {settings && Object.entries(localSettings).map(([key, value]) => (
-              <div key={key} className="px-4 py-4">
-                <label className="block text-xs font-medium text-gray-400 mb-1 uppercase tracking-wide">
-                  {key.replace(/_/g, ' ')}
-                </label>
-                {typeof value === 'boolean' ? (
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={value as boolean}
-                      onChange={e => updateSetting(key, String(e.target.checked))}
-                      className="w-4 h-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-300">{value ? 'Enabled' : 'Disabled'}</span>
-                  </label>
-                ) : (
-                  <input
-                    type="text"
-                    value={String(value ?? '')}
-                    onChange={e => updateSetting(key, e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-100 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                  />
-                )}
+        <form onSubmit={handleSave} className="space-y-6">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
+            {settings && Object.keys(settings).length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-zinc-500 text-sm italic">No configurable settings found.</p>
               </div>
-            ))}
+            ) : (
+              <div className="divide-y divide-zinc-800">
+                {settings && Object.entries(localSettings).map(([key, value]) => (
+                  <div key={key} className="p-5 flex flex-col gap-2 hover:bg-zinc-950/30 transition-colors">
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">
+                      {key.replace(/_/g, ' ')}
+                    </label>
+                    {typeof value === 'boolean' ? (
+                      <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                        <span className="text-sm text-zinc-300 font-medium">{value ? 'Enabled' : 'Disabled'}</span>
+                        <input
+                          type="checkbox"
+                          checked={value}
+                          onChange={e => updateSetting(key, e.target.checked)}
+                          className="w-5 h-5 rounded-lg border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500 transition-all"
+                        />
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={String(value ?? '')}
+                        onChange={e => updateSetting(key, e.target.value)}
+                        className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 text-sm focus:outline-none focus:border-indigo-500/50 transition-all font-mono"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {saveMessage && (
-            <div className={`px-4 py-3 rounded-lg border text-sm ${
+            <div className={`px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest border animate-slide-up ${
               saveMessage.includes('!')
-                ? 'bg-green-900/30 border-green-700 text-green-300'
-                : 'bg-red-900/30 border-red-700 text-red-300'
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
             }`}>
               {saveMessage}
             </div>
@@ -117,30 +119,25 @@ export function Settings() {
             <button
               type="submit"
               disabled={saving}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg min-h-[48px] transition-colors flex items-center justify-center gap-2"
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 transition-all tap-feedback flex items-center justify-center gap-2"
             >
-              {saving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Saving...
-                </>
-              ) : 'Save Settings'}
+              {saving ? 'Saving...' : 'Save Settings'}
             </button>
           )}
         </form>
       )}
 
       {/* App info section */}
-      <div className="mt-6 bg-gray-800 border border-gray-700 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3">About</h3>
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Application</span>
-            <span className="text-gray-200">CloudCode</span>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-xl">
+        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] mb-4">System Information</h3>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center bg-zinc-950 px-4 py-3 rounded-xl border border-zinc-800">
+            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Application</span>
+            <span className="text-sm text-zinc-100 font-bold tracking-tight">CloudCode Core</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Version</span>
-            <span className="text-gray-200 font-mono">1.0.0</span>
+          <div className="flex justify-between items-center bg-zinc-950 px-4 py-3 rounded-xl border border-zinc-800">
+            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Version</span>
+            <span className="text-xs text-indigo-400 font-mono font-bold">v1.0.0-stable</span>
           </div>
         </div>
       </div>

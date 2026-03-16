@@ -1,11 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../hooks/useApi'
-import { useAuth } from '../hooks/useAuth'
+import { useAuthContext } from '../hooks/useAuth'
 
 export function Bootstrap() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login } = useAuthContext()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')

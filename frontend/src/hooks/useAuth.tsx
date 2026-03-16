@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { User } from '../types'
 import { apiFetch } from './useApi'
 
@@ -8,34 +8,35 @@ export interface AuthState {
   isAuthenticated: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  refetch: () => Promise<void>
 }
 
-export function useAuth(): AuthState {
+const AuthContext = createContext<AuthState | null>(null)
+
+export function useAuthContext(): AuthState {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuthContext must be used within AuthProvider')
+  return ctx
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    setIsLoading(true)
-
-    apiFetch<{ user: User }>('/api/v1/auth/me')
-      .then(res => {
-        if (!cancelled) {
-          setUser(res.user)
-          setIsLoading(false)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setUser(null)
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      cancelled = true
+  const fetchMe = useCallback(async () => {
+    try {
+      const res = await apiFetch<{ user: User }>('/api/v1/auth/me')
+      setUser(res.user)
+    } catch {
+      setUser(null)
+    } finally {
+      setIsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    fetchMe()
+  }, [fetchMe])
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await apiFetch<{ user: User }>('/api/v1/auth/login', {
@@ -50,11 +51,14 @@ export function useAuth(): AuthState {
     setUser(null)
   }, [])
 
-  return {
+  const value: AuthState = {
     user,
     isLoading,
     isAuthenticated: user !== null,
     login,
     logout,
+    refetch: fetchMe,
   }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

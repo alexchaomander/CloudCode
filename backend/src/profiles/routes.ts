@@ -21,12 +21,12 @@ function parseProfile(row: AgentProfile) {
     command: row.command,
     args: JSON.parse(row.args_json) as string[],
     env: JSON.parse(row.env_json) as Record<string, string>,
-    default_workdir: row.default_workdir,
-    startup_template: row.startup_template,
-    stop_method: row.stop_method,
-    supports_interactive_input: row.supports_interactive_input === 1,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    defaultWorkdir: row.default_workdir,
+    startupTemplate: row.startup_template,
+    stopMethod: row.stop_method,
+    supportsInteractiveInput: row.supports_interactive_input === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 

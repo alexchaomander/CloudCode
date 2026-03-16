@@ -2,14 +2,34 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { existsSync, statSync } from 'fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { logAudit } from '../audit/service.js';
 import type { RepoRoot } from '../db/schema.js';
+import { discoverProjects } from './service.js';
+
+function expandPath(p: string): string {
+  if (p.startsWith('~')) {
+    return join(homedir(), p.slice(1));
+  }
+  return p;
+}
+
+function parseRepo(row: RepoRoot) {
+  return {
+    id: row.id,
+    label: row.label,
+    absolutePath: row.absolute_path,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 const repoCreateSchema = z.object({
   label: z.string().min(1).max(256),
-  absolute_path: z.string().min(1).startsWith('/'),
+  absolutePath: z.string().min(1),
 });
 
 const repoUpdateSchema = repoCreateSchema.partial();
@@ -18,7 +38,13 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/v1/repos
   fastify.get('/api/v1/repos', { preHandler: requireAuth }, async (request, reply) => {
     const rows = db.prepare('SELECT * FROM repo_roots ORDER BY label ASC').all() as RepoRoot[];
-    return reply.send({ repos: rows });
+    return reply.send({ repos: rows.map(parseRepo) });
+  });
+
+  // GET /api/v1/repos/discover
+  fastify.get('/api/v1/repos/discover', { preHandler: requireAuth }, async (request, reply) => {
+    const projects = discoverProjects();
+    return reply.send({ projects });
   });
 
   // POST /api/v1/repos
@@ -32,30 +58,31 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    const { label, absolute_path } = parseResult.data;
+    const { label, absolutePath } = parseResult.data;
+    const expandedPath = expandPath(absolutePath);
 
     // Validate the path exists on the filesystem
-    if (!existsSync(absolute_path)) {
+    if (!existsSync(expandedPath)) {
       return reply.status(400).send({
         error: 'Invalid Path',
-        message: `Path does not exist on the filesystem: ${absolute_path}`,
+        message: `Path does not exist on the filesystem: ${expandedPath}`,
       });
     }
 
-    const stat = statSync(absolute_path);
+    const stat = statSync(expandedPath);
     if (!stat.isDirectory()) {
       return reply.status(400).send({
         error: 'Invalid Path',
-        message: `Path is not a directory: ${absolute_path}`,
+        message: `Path is not a directory: ${expandedPath}`,
       });
     }
 
     // Check path uniqueness
-    const existingPath = db.prepare('SELECT id FROM repo_roots WHERE absolute_path = ?').get(absolute_path);
+    const existingPath = db.prepare('SELECT id FROM repo_roots WHERE absolute_path = ?').get(absolutePath);
     if (existingPath) {
       return reply.status(409).send({
         error: 'Conflict',
-        message: `A repo root with path "${absolute_path}" already exists`,
+        message: `A repo root with path "${absolutePath}" already exists`,
       });
     }
 
@@ -65,7 +92,7 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
     db.prepare(`
       INSERT INTO repo_roots (id, label, absolute_path, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, label, absolute_path, now, now);
+    `).run(id, label, absolutePath, now, now);
 
     const row = db.prepare('SELECT * FROM repo_roots WHERE id = ?').get(id) as RepoRoot;
 
@@ -74,10 +101,10 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
       eventType: 'repo.created',
       targetType: 'repo_root',
       targetId: id,
-      metadata: { label, absolute_path },
+      metadata: { label, absolutePath },
     });
 
-    return reply.status(201).send({ repo: row });
+    return reply.status(201).send({ repo: parseRepo(row) });
   });
 
   // GET /api/v1/repos/:id
@@ -89,7 +116,7 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ error: 'Not Found', message: 'Repo not found' });
     }
 
-    return reply.send({ repo: row });
+    return reply.send({ repo: parseRepo(row) });
   });
 
   // PUT /api/v1/repos/:id
@@ -111,31 +138,32 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const data = parseResult.data;
-    const newPath = data.absolute_path ?? existing.absolute_path;
+    const newPath = data.absolutePath ?? existing.absolute_path;
+    const expandedNewPath = expandPath(newPath);
 
     // Validate new path if provided
-    if (data.absolute_path) {
-      if (!existsSync(data.absolute_path)) {
+    if (data.absolutePath) {
+      if (!existsSync(expandedNewPath)) {
         return reply.status(400).send({
           error: 'Invalid Path',
-          message: `Path does not exist on the filesystem: ${data.absolute_path}`,
+          message: `Path does not exist on the filesystem: ${expandedNewPath}`,
         });
       }
 
-      const stat = statSync(data.absolute_path);
+      const stat = statSync(expandedNewPath);
       if (!stat.isDirectory()) {
         return reply.status(400).send({
           error: 'Invalid Path',
-          message: `Path is not a directory: ${data.absolute_path}`,
+          message: `Path is not a directory: ${expandedNewPath}`,
         });
       }
 
       // Check uniqueness excluding self
-      const pathConflict = db.prepare('SELECT id FROM repo_roots WHERE absolute_path = ? AND id != ?').get(data.absolute_path, id);
+      const pathConflict = db.prepare('SELECT id FROM repo_roots WHERE absolute_path = ? AND id != ?').get(data.absolutePath, id);
       if (pathConflict) {
         return reply.status(409).send({
           error: 'Conflict',
-          message: `A repo root with path "${data.absolute_path}" already exists`,
+          message: `A repo root with path "${data.absolutePath}" already exists`,
         });
       }
     }
@@ -156,7 +184,7 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
       metadata: { changes: data },
     });
 
-    return reply.send({ repo: updated });
+    return reply.send({ repo: parseRepo(updated) });
   });
 
   // DELETE /api/v1/repos/:id
@@ -168,7 +196,7 @@ const repoRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ error: 'Not Found', message: 'Repo not found' });
     }
 
-    // Check if any active sessions use this repo
+    // Check if any active sessions use this profile
     const activeSessions = db.prepare(`
       SELECT COUNT(*) as count FROM sessions
       WHERE repo_root_id = ? AND status IN ('pending', 'running')

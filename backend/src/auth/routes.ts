@@ -46,40 +46,45 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { username, password } = parseResult.data;
-    const passwordHash = await hashPassword(password);
-    const user = createUser(username, passwordHash, true);
+    try {
+      const passwordHash = await hashPassword(password);
+      const user = createUser(username, passwordHash, true);
 
-    logAudit({
-      actorUserId: user.id,
-      eventType: 'user.bootstrap',
-      targetType: 'user',
-      targetId: user.id,
-      metadata: { username },
-    });
+      logAudit({
+        actorUserId: user.id,
+        eventType: 'user.bootstrap',
+        targetType: 'user',
+        targetId: user.id,
+        metadata: { username },
+      });
 
-    const ip = request.ip ?? '';
-    const userAgent = request.headers['user-agent'] ?? '';
-    const tailscaleIdentity = (request.headers['x-tailscale-user'] as string) ?? null;
-    const token = createSession(user.id, ip, userAgent, tailscaleIdentity);
+      const ip = request.ip ?? '';
+      const userAgent = request.headers['user-agent'] ?? '';
+      const tailscaleIdentity = (request.headers['x-tailscale-user'] as string) ?? null;
+      const token = createSession(user.id, ip, userAgent, tailscaleIdentity);
 
-    reply.setCookie('session', token, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
-    });
+      reply.setCookie('session', token, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
+      });
 
-    return reply.status(201).send({
-      user: {
-        id: user.id,
-        username: user.username,
-        is_admin: user.is_admin === 1,
-        totp_enabled: user.totp_enabled === 1,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        last_login_at: user.last_login_at,
-      },
-    });
+      return reply.status(201).send({
+        user: {
+          id: user.id,
+          username: user.username,
+          isAdmin: user.is_admin === 1,
+          totpEnabled: user.totp_enabled === 1,
+          createdAt: user.created_at,
+          updatedAt: user.updated_at,
+          lastLoginAt: user.last_login_at,
+        },
+      });
+    } catch (err) {
+      fastify.log.error(err);
+      throw err;
+    }
   });
 
   // POST /api/v1/auth/login
@@ -135,10 +140,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       metadata: { ip: request.ip, userAgent },
     });
 
+    const isHttps = request.protocol === 'https' || request.headers['x-forwarded-proto'] === 'https';
+
     reply.setCookie('session', token, {
       path: '/',
       httpOnly: true,
-      sameSite: 'lax',
+      secure: isHttps,
+      sameSite: isHttps ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60,
     });
 
@@ -146,11 +154,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       user: {
         id: user.id,
         username: user.username,
-        is_admin: user.is_admin === 1,
-        totp_enabled: user.totp_enabled === 1,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        last_login_at: user.last_login_at,
+        isAdmin: user.is_admin === 1,
+        totpEnabled: user.totp_enabled === 1,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+        lastLoginAt: user.last_login_at,
       },
     });
   });
@@ -193,11 +201,66 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       user: {
         id: user.id,
         username: user.username,
-        is_admin: user.is_admin === 1,
-        totp_enabled: user.totp_enabled === 1,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        last_login_at: user.last_login_at,
+        isAdmin: user.is_admin === 1,
+        totpEnabled: user.totp_enabled === 1,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+        lastLoginAt: user.last_login_at,
+      },
+    });
+  });
+
+  // POST /api/v1/auth/pair - authenticate via pairing token
+  fastify.post('/api/v1/auth/pair', async (request, reply) => {
+    const { token } = request.body as { token: string };
+    if (!token) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'Token is required' });
+    }
+
+    const { consumePairingToken } = await import('./service.js');
+    const userId = consumePairingToken(token);
+
+    if (!userId) {
+      return reply.status(401).send({ error: 'Unauthorized', message: 'Invalid or expired pairing token' });
+    }
+
+    const user = getUserById(userId);
+    if (!user) {
+      return reply.status(404).send({ error: 'Not Found', message: 'User not found' });
+    }
+
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    const tailscaleIdentity = (request.headers['x-tailscale-user'] as string) ?? null;
+    const sessionToken = createSession(user.id, ip, userAgent, tailscaleIdentity);
+
+    logAudit({
+      actorUserId: user.id,
+      eventType: 'auth.pair',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { ip: request.ip, userAgent },
+    });
+
+    const isHttps = request.protocol === 'https' || request.headers['x-forwarded-proto'] === 'https';
+
+    reply.setCookie('session', sessionToken, {
+      path: '/',
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: isHttps ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60,
+    });
+
+    return reply.send({
+      user: {
+        id: user.id,
+        username: user.username,
+        isAdmin: user.is_admin === 1,
+        totpEnabled: user.totp_enabled === 1,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+        lastLoginAt: user.last_login_at,
       },
     });
   });

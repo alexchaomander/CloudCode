@@ -1,29 +1,17 @@
-import { createContext, useContext, ReactNode } from 'react'
+import { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAuth, AuthState } from './hooks/useAuth'
+import { AuthProvider, useAuthContext } from './hooks/useAuth'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { Bootstrap } from './pages/Bootstrap'
+import { Pairing } from './pages/Pairing'
 import { Dashboard } from './pages/Dashboard'
 import { NewSession } from './pages/NewSession'
 import { SessionDetail } from './pages/SessionDetail'
 import { Profiles } from './pages/Profiles'
+import { Repositories } from './pages/Repositories'
 import { Settings } from './pages/Settings'
 import { AuditLog } from './pages/AuditLog'
-
-// Auth context so child components can access auth state
-const AuthContext = createContext<AuthState | null>(null)
-
-export function useAuthContext(): AuthState {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuthContext must be used within AuthProvider')
-  return ctx
-}
-
-function AuthProvider({ children }: { children: ReactNode }) {
-  const auth = useAuth()
-  return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>
-}
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -53,6 +41,7 @@ function AppRoutes() {
       {/* Public routes (no Layout) */}
       <Route path="/login" element={<Login />} />
       <Route path="/bootstrap" element={<Bootstrap />} />
+      <Route path="/pair" element={<Pairing />} />
 
       {/* Protected routes wrapped in Layout */}
       <Route
@@ -84,11 +73,29 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/sessions/mirror/:sessionName"
+        element={
+          <ProtectedRoute>
+            <SessionDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/profiles"
         element={
           <ProtectedRoute>
             <Layout>
               <Profiles />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/repositories"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Repositories />
             </Layout>
           </ProtectedRoute>
         }

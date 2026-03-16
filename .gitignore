@@ -6,6 +6,8 @@ data/
 .env.local
 logs/
 *.log
+backend/bin/
+backend/frontend-dist/
 .DS_Store
 .vscode/
 .idea/

@@ -1,155 +1,81 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { SocketStream } from '@fastify/websocket';
-import type WebSocket from 'ws';
-import { requireAuth } from '../auth/middleware.js';
 import { getSession, getSessionByPublicId } from '../sessions/service.js';
-import * as tmux from '../tmux/adapter.js';
 import { validateSession } from '../auth/service.js';
-
-const POLL_INTERVAL_MS = parseInt(process.env.TERMINAL_POLL_INTERVAL_MS ?? '500', 10);
-
-// Track active WebSocket connections per session
-const activeConnections = new Map<string, Set<WebSocket>>();
-
-// Track last known pane content per session for diffing
-const lastPaneContent = new Map<string, string>();
-
-// Global poll timers
-const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
-
-function broadcastToSession(sessionId: string, message: unknown): void {
-  const connections = activeConnections.get(sessionId);
-  if (!connections) return;
-
-  const data = JSON.stringify(message);
-  for (const ws of connections) {
-    try {
-      if (ws.readyState === 1 /* OPEN */) {
-        ws.send(data);
-      }
-    } catch {
-      // Client disconnected, ignore
-    }
-  }
-}
-
-function startPolling(sessionId: string, tmuxSessionName: string): void {
-  if (pollTimers.has(sessionId)) return;
-
-  const timer = setInterval(async () => {
-    const connections = activeConnections.get(sessionId);
-    if (!connections || connections.size === 0) {
-      stopPolling(sessionId);
-      return;
-    }
-
-    try {
-      const content = await tmux.capturePane(tmuxSessionName);
-      const last = lastPaneContent.get(sessionId) ?? '';
-
-      if (content !== last) {
-        lastPaneContent.set(sessionId, content);
-        broadcastToSession(sessionId, {
-          type: 'terminal.output',
-          data: content,
-        });
-      }
-
-      // Check if session is still alive
-      const alive = await tmux.hasSession(tmuxSessionName);
-      if (!alive) {
-        broadcastToSession(sessionId, {
-          type: 'session.status',
-          status: 'stopped',
-        });
-        stopPolling(sessionId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Poll error';
-      broadcastToSession(sessionId, {
-        type: 'session.error',
-        message,
-      });
-    }
-  }, POLL_INTERVAL_MS);
-
-  pollTimers.set(sessionId, timer);
-}
-
-function stopPolling(sessionId: string): void {
-  const timer = pollTimers.get(sessionId);
-  if (timer) {
-    clearInterval(timer);
-    pollTimers.delete(sessionId);
-  }
-}
-
-function addConnection(sessionId: string, ws: WebSocket): void {
-  let connections = activeConnections.get(sessionId);
-  if (!connections) {
-    connections = new Set();
-    activeConnections.set(sessionId, connections);
-  }
-  connections.add(ws);
-}
-
-function removeConnection(sessionId: string, ws: WebSocket): void {
-  const connections = activeConnections.get(sessionId);
-  if (connections) {
-    connections.delete(ws);
-    if (connections.size === 0) {
-      activeConnections.delete(sessionId);
-      stopPolling(sessionId);
-      lastPaneContent.delete(sessionId);
-    }
-  }
-}
+import { sidecarManager, type SidecarStreamHandle } from './sidecar-manager.js';
+import * as tmux from '../tmux/adapter.js';
+import {
+  appendTranscript,
+  appendTranscriptResize,
+  formatReadableTerminalText,
+  hasReadableTranscriptArtifacts,
+  readTranscript,
+} from './transcript-store.js';
 
 const terminalRoutes: FastifyPluginAsync = async (fastify) => {
-  // GET /api/v1/sessions/:id/terminal/bootstrap
-  fastify.get(
-    '/api/v1/sessions/:id/terminal/bootstrap',
-    { preHandler: requireAuth },
-    async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const session = getSession(id) ?? getSessionByPublicId(id);
+  fastify.get('/api/v1/sessions/:id/terminal/bootstrap', async (request, reply) => {
+    const cookieToken = request.cookies?.['session'];
+    const queryToken = (request.query as Record<string, string>)['token'];
+    const token = cookieToken ?? queryToken;
 
-      if (!session) {
-        return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
-      }
+    if (!token || !validateSession(token)) {
+      return reply.status(401).send({ error: 'Unauthorized', message: 'Authentication required' });
+    }
 
-      // Get current tmux output
-      let currentOutput = '';
-      if (session.status === 'running') {
-        try {
-          currentOutput = await tmux.capturePane(session.tmux_session_name);
-        } catch {
-          // Ignore capture errors
-        }
-      }
+    const { id } = request.params as { id: string };
+    const session = getSession(id) ?? getSessionByPublicId(id);
+    if (!session) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
+    }
+
+    const isTerminalAvailable = session.status === 'running' || session.status === 'stopped' || session.status === 'error';
+    const [dimensions, historyOutput, currentOutput] = await Promise.all([
+      isTerminalAvailable
+        ? tmux.getPaneDimensions(session.tmuxSessionName)
+        : Promise.resolve({ cols: 160, rows: 48 }),
+      isTerminalAvailable
+        ? tmux.capturePaneHistory(session.tmuxSessionName)
+        : Promise.resolve(''),
+      isTerminalAvailable
+        ? tmux.capturePane(session.tmuxSessionName)
+        : Promise.resolve(''),
+    ]);
+    try {
+      const transcriptOutput = await readTranscript(session.id, { ...dimensions, asMarkdown: true });
+      const paneOutput = [historyOutput, currentOutput].filter(Boolean).join('\n').trim();
+      const readablePaneOutput = formatReadableTerminalText(paneOutput);
+      
+      // We prioritize the semantic markdown transcript output if it exists and has content
+      const readableOutput = transcriptOutput 
+        ? transcriptOutput 
+        : (readablePaneOutput || await readTranscript(session.id, dimensions));
 
       return reply.send({
-        session: {
-          id: session.id,
-          public_id: session.public_id,
-          title: session.title,
-          status: session.status,
-          tmux_session_name: session.tmux_session_name,
-          agent_profile: session.agent_profile,
-        },
-        current_output: currentOutput,
-        poll_interval_ms: POLL_INTERVAL_MS,
+        readableOutput,
+        transcriptOutput,
+        readablePaneOutput,
+        historyOutput,
+        currentOutput,
+        fullOutput: readableOutput || (paneOutput || currentOutput),
       });
+    } catch (e: any) {
+      request.log.error({ err: e }, "Error in bootstrap");
+      throw e;
     }
-  );
+  });
 
-  // WebSocket at /ws/terminal?sessionId=xxx
-  fastify.get('/ws/terminal', { websocket: true }, (connection: SocketStream, request) => {
-    const ws = connection.socket;
-    let sessionId: string | null = null;
-    let tmuxSessionName: string | null = null;
+  fastify.get('/ws/terminal', { websocket: true }, (connection: any, request) => {
+    // In @fastify/websocket v11, connection might be the socket itself or contain a socket
+    const ws = connection.socket || connection;
+    
+    if (!ws || typeof ws.send !== 'function') {
+      fastify.log.error({ connection: !!connection }, 'Invalid WebSocket connection object');
+      return;
+    }
+    let ptySession: SidecarStreamHandle | null = null;
+    let attachedSession: ReturnType<typeof getSession> | null = null;
+    let attachPromise: Promise<void> | null = null;
+    let lastSize = { cols: 80, rows: 24 };
 
-    // Authenticate via cookie or query param token
     const cookieToken = request.cookies?.['session'];
     const queryToken = (request.query as Record<string, string>)['token'];
     const token = cookieToken ?? queryToken;
@@ -171,41 +97,57 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
       return;
     }
 
-    // Subscribe to sessionId if provided in query
-    const querySessionId = (request.query as Record<string, string>)['sessionId'];
-    if (querySessionId) {
-      const session = getSession(querySessionId) ?? getSessionByPublicId(querySessionId);
-      if (session) {
-        sessionId = session.id;
-        tmuxSessionName = session.tmux_session_name;
-        addConnection(sessionId, ws);
-        startPolling(sessionId, tmuxSessionName);
-
-        // Send initial output async
-        tmux.capturePane(tmuxSessionName)
-          .then((initialOutput) => {
-            if (initialOutput && sessionId) {
-              lastPaneContent.set(sessionId, initialOutput);
-              ws.send(JSON.stringify({
-                type: 'terminal.output',
-                data: initialOutput,
-              }));
-            }
-          })
-          .catch(() => {
-            // Ignore initial capture errors
-          });
-
-        ws.send(JSON.stringify({
-          type: 'session.status',
-          status: session.status,
-        }));
-      } else {
+    const attachSession = async (requestedSessionId: string): Promise<void> => {
+      const session = getSession(requestedSessionId) ?? getSessionByPublicId(requestedSessionId);
+      if (!session) {
         ws.send(JSON.stringify({
           type: 'session.error',
-          message: `Session not found: ${querySessionId}`,
+          message: `Session not found: ${requestedSessionId}`,
         }));
+        return;
       }
+
+      await ptySession?.close().catch(() => {});
+      attachedSession = session;
+      ptySession = await sidecarManager.openStream(session.tmuxSessionName, lastSize.cols, lastSize.rows, {
+        onOutput: ({ text, dataBase64 }) => {
+          void appendTranscript(session.id, text).catch(() => {});
+          if (ws.readyState !== 1) return;
+          ws.send(JSON.stringify({ type: 'terminal.output', dataBase64 }));
+        },
+        onExit: () => {
+          if (ws.readyState !== 1) return;
+          ws.send(JSON.stringify({ type: 'session.status', status: 'stopped' }));
+        },
+        onError: (message) => {
+          if (ws.readyState !== 1) return;
+          ws.send(JSON.stringify({ type: 'session.error', message }));
+        },
+      });
+
+      ws.send(JSON.stringify({
+        type: 'session.status',
+        status: session.status,
+      }));
+      void appendTranscriptResize(session.id, lastSize.cols, lastSize.rows).catch(() => {});
+    };
+
+    const attachAndTrack = (requestedSessionId: string): Promise<void> => {
+      const promise = attachSession(requestedSessionId).finally(() => {
+        if (attachPromise === promise) {
+          attachPromise = null;
+        }
+      });
+      attachPromise = promise;
+      return promise;
+    };
+
+    const querySessionId = (request.query as Record<string, string>)['sessionId'];
+    if (querySessionId) {
+      void attachAndTrack(querySessionId).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to start terminal stream';
+        ws.send(JSON.stringify({ type: 'session.error', message }));
+      });
     }
 
     ws.on('message', (rawMessage: Buffer | string) => {
@@ -222,49 +164,17 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
           switch (message.type) {
             case 'subscribe': {
               if (message.sessionId) {
-                // Unsubscribe from previous session
-                if (sessionId) {
-                  removeConnection(sessionId, ws);
-                }
-
-                const session = getSession(message.sessionId) ?? getSessionByPublicId(message.sessionId);
-                if (!session) {
-                  ws.send(JSON.stringify({
-                    type: 'session.error',
-                    message: `Session not found: ${message.sessionId}`,
-                  }));
-                  return;
-                }
-
-                sessionId = session.id;
-                tmuxSessionName = session.tmux_session_name;
-                addConnection(sessionId, ws);
-                startPolling(sessionId, tmuxSessionName);
-
-                // Send current state
-                try {
-                  const initialOutput = await tmux.capturePane(tmuxSessionName);
-                  if (initialOutput) {
-                    lastPaneContent.set(sessionId, initialOutput);
-                    ws.send(JSON.stringify({
-                      type: 'terminal.output',
-                      data: initialOutput,
-                    }));
-                  }
-                } catch {
-                  // Ignore
-                }
-
-                ws.send(JSON.stringify({
-                  type: 'session.status',
-                  status: session.status,
-                }));
+                await attachAndTrack(message.sessionId);
               }
               break;
             }
 
             case 'terminal.input': {
-              if (!sessionId || !tmuxSessionName) {
+              if (!ptySession && attachPromise) {
+                await attachPromise;
+              }
+
+              if (!ptySession) {
                 ws.send(JSON.stringify({
                   type: 'session.error',
                   message: 'Not subscribed to a session',
@@ -273,32 +183,22 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
               }
 
               if (message.data !== undefined) {
-                await tmux.sendKeys(tmuxSessionName, message.data);
+                await ptySession.write(message.data);
               }
               break;
             }
 
             case 'terminal.resize': {
-              if (!tmuxSessionName) return;
+              if (!ptySession && attachPromise) {
+                await attachPromise;
+              }
 
               if (message.cols && message.rows) {
-                await tmux.resizeWindow(tmuxSessionName, message.cols, message.rows);
-              }
-              break;
-            }
-
-            case 'request_refresh': {
-              if (!sessionId || !tmuxSessionName) return;
-
-              try {
-                const content = await tmux.capturePane(tmuxSessionName);
-                lastPaneContent.set(sessionId, content);
-                ws.send(JSON.stringify({
-                  type: 'terminal.output',
-                  data: content,
-                }));
-              } catch {
-                // Ignore
+                lastSize = { cols: message.cols, rows: message.rows };
+                await ptySession?.resize(message.cols, message.rows);
+                if (attachedSession) {
+                  void appendTranscriptResize(attachedSession.id, message.cols, message.rows).catch(() => {});
+                }
               }
               break;
             }
@@ -316,23 +216,21 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
               type: 'session.error',
               message: msg,
             }));
-          } catch {
-            // Socket may be closed
-          }
+          } catch {}
         }
       })();
     });
 
     ws.on('close', () => {
-      if (sessionId) {
-        removeConnection(sessionId, ws);
-      }
+      void ptySession?.close().catch(() => {});
+      ptySession = null;
+      attachedSession = null;
     });
 
     ws.on('error', () => {
-      if (sessionId) {
-        removeConnection(sessionId, ws);
-      }
+      void ptySession?.close().catch(() => {});
+      ptySession = null;
+      attachedSession = null;
     });
   });
 };

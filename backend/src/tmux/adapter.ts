@@ -40,6 +40,8 @@ export async function createSession(
     'new-session',
     '-d',
     '-s', name,
+    '-x', '160',
+    '-y', '48',
     '-c', cwd,
     ...envArgs,
     '--',
@@ -95,24 +97,123 @@ export async function hasSession(name: string): Promise<boolean> {
 
 export async function capturePane(sessionName: string): Promise<string> {
   try {
-    const { stdout } = await run(['capture-pane', '-t', sessionName, '-p', '-e']);
+    const state = await getPaneState(sessionName);
+    const args = ['capture-pane', '-t', sessionName, '-p', '-e', '-N'];
+
+    if (state.alternateOn) {
+      args.push('-a');
+    }
+
+    const { stdout } = await run(args);
     return stdout;
   } catch {
     return '';
   }
 }
 
+export async function capturePaneHistory(sessionName: string): Promise<string> {
+  try {
+    const state = await getPaneState(sessionName);
+    if (state.alternateOn) {
+      return '';
+    }
+
+    const [history, dimensions] = await Promise.all([
+      run(['capture-pane', '-t', sessionName, '-p', '-e', '-N', '-S', '-']),
+      getPaneDimensions(sessionName),
+    ]);
+
+    const lines = history.stdout.split('\n');
+    if (dimensions.rows <= 0 || lines.length <= dimensions.rows) {
+      return '';
+    }
+
+    return lines.slice(0, Math.max(0, lines.length - dimensions.rows)).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+export interface TmuxPaneState {
+  paneId: string;
+  cursorX: number;
+  cursorY: number;
+  alternateOn: boolean;
+}
+
+export async function getPaneState(sessionName: string): Promise<TmuxPaneState> {
+  try {
+    const { stdout } = await run([
+      'display-message',
+      '-t', sessionName,
+      '-p',
+      '#{pane_id}|#{cursor_x}|#{cursor_y}|#{alternate_on}'
+    ]);
+    const [paneId, x, y, alternateOn] = stdout.trim().split('|');
+
+    return {
+      paneId: paneId ?? '',
+      cursorX: Number(x) || 0,
+      cursorY: Number(y) || 0,
+      alternateOn: alternateOn === '1',
+    };
+  } catch {
+    return {
+      paneId: '',
+      cursorX: 0,
+      cursorY: 0,
+      alternateOn: false,
+    };
+  }
+}
+
+export async function getCursor(sessionName: string): Promise<{ x: number; y: number }> {
+  const state = await getPaneState(sessionName);
+  return { x: state.cursorX, y: state.cursorY };
+}
+
+export async function getPaneDimensions(sessionName: string): Promise<{ cols: number; rows: number }> {
+  try {
+    const { stdout } = await run([
+      'display-message',
+      '-t', sessionName,
+      '-p',
+      '#{pane_width}|#{pane_height}',
+    ]);
+    const [cols, rows] = stdout.trim().split('|').map(Number);
+    return {
+      cols: cols || 0,
+      rows: rows || 0,
+    };
+  } catch {
+    return { cols: 0, rows: 0 };
+  }
+}
+
 export async function sendKeys(sessionName: string, keys: string): Promise<void> {
-  // send-keys -t sessionName keys
-  await run(['send-keys', '-t', sessionName, keys]);
+  const bytes = Buffer.from(keys, 'utf8');
+  if (bytes.length === 0) return;
+
+  await run([
+    'send-keys',
+    '-H',
+    '-t',
+    sessionName,
+    ...Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')),
+  ]);
+}
+
+export async function sendLiteralText(sessionName: string, text: string): Promise<void> {
+  if (!text) return;
+  await run(['send-keys', '-l', '-t', sessionName, text]);
+}
+
+export async function sendEnter(sessionName: string): Promise<void> {
+  await run(['send-keys', '-t', sessionName, 'Enter']);
 }
 
 export async function killSession(sessionName: string): Promise<void> {
-  try {
-    await run(['kill-session', '-t', sessionName]);
-  } catch {
-    // Session may already be gone
-  }
+  await run(['kill-session', '-t', sessionName]);
 }
 
 export async function resizeWindow(
@@ -133,9 +234,5 @@ export async function resizeWindow(
 }
 
 export async function sendCtrlC(sessionName: string): Promise<void> {
-  try {
-    await run(['send-keys', '-t', sessionName, 'C-c']);
-  } catch {
-    // Best-effort
-  }
+  await run(['send-keys', '-t', sessionName, 'C-c']);
 }
