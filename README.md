@@ -2,8 +2,6 @@
 
 A self-hosted web interface for managing and monitoring local CLI-based AI coding agents — remotely, from any device.
 
-![CloudCode screenshot](docs/images/screenshot.png)
-
 Start an agent on your laptop, walk away, and check in from your phone or tablet. CloudCode keeps the session alive, renders the output cleanly, and lets you stay in the loop wherever you are.
 
 ---
