@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "CloudCode frontend — mobile-first React UI for coding agent session management",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -5,9 +5,11 @@ import qrcode from 'qrcode-terminal';
 import { execSync, spawn } from 'child_process';
 import { join } from 'path';
 import { tmpdir, networkInterfaces } from 'os';
+import { randomBytes } from 'crypto';
+import { nanoid } from 'nanoid';
 import { buildApp } from './index.js';
 import { runMigrations } from './db/migrations.js';
-import { getFirstAdminUser, createPairingToken } from './auth/service.js';
+import { getFirstAdminUser, createPairingToken, hashPassword, createUser } from './auth/service.js';
 import { syncSessionStatus, createSession } from './sessions/service.js';
 import { sidecarManager } from './terminal/sidecar-manager.js';
 import { db } from './db/index.js';
@@ -120,13 +122,29 @@ program
       }
     }
 
-    const admin = getFirstAdminUser();
+    let admin = getFirstAdminUser();
     if (!admin) {
-      console.error(chalk.red('Error: No admin user found. Please run "cloudcode start" and bootstrap first.'));
-      process.exit(1);
+      console.log(chalk.yellow('ℹ️ No admin user found. Auto-bootstrapping first-time user...'));
+      const username = process.env.USER || 'admin';
+      const password = randomBytes(12).toString('hex');
+      const passwordHash = await hashPassword(password);
+      admin = createUser(username, passwordHash, true);
+      console.log(chalk.green(`✅ Created admin user: ${chalk.bold(username)}`));
+      console.log(chalk.dim(`   (Password: ${password} - You can change this in Settings later)\n`));
     }
 
     const port = parseInt(options.port, 10);
+    const workdir = process.cwd();
+
+    // Auto-register repo root if it doesn't exist
+    const roots = db.prepare('SELECT * FROM repo_roots').all() as { absolute_path: string }[];
+    const hasRoot = roots.some(r => workdir.startsWith(r.absolute_path));
+    if (!hasRoot) {
+      const rootId = nanoid();
+      const label = workdir.split('/').pop() || 'Project';
+      db.prepare('INSERT INTO repo_roots (id, label, absolute_path) VALUES (?, ?, ?)').run(rootId, label, workdir);
+      console.log(chalk.dim(`📡 Registered repo root: ${workdir}`));
+    }
     // Use a unique socket for this run to avoid conflicts
     const sidecarSocketPath = join(tmpdir(), `cloudcode-pty-${Date.now()}.sock`);
 

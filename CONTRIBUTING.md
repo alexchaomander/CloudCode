@@ -34,13 +34,6 @@ cd CloudCode
 # Install all dependencies (root + workspaces)
 npm install
 
-# Set up environment
-cp .env.example .env
-# Edit .env — SESSION_SECRET is required
-
-# Run migrations
-npm run migrate
-
 # Start both backend (port 3000) and frontend dev server (port 5173) in parallel
 npm run dev
 ```
@@ -49,7 +42,10 @@ The frontend dev server proxies `/api` and `/ws` to the backend, so you only nee
 
 ### First-time setup
 
-Visit `http://localhost:5173/bootstrap` to create your admin account.
+The first time you start CloudCode, it will automatically generate a persistent `SESSION_SECRET` and save it to the local SQLite database.
+
+- **Option A (Web):** Visit `http://localhost:5173/bootstrap` to create your admin account.
+- **Option B (CLI):** Just run `cloudcode run gemini-cli --rc`. It will auto-bootstrap a local admin user and register your current directory for you.
 
 ---
 

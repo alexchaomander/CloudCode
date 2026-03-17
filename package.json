@@ -23,7 +23,7 @@
     "terminal",
     "mobile"
   ],
-  "private": true,
+  "private": false,
   "workspaces": [
     "backend",
     "frontend"

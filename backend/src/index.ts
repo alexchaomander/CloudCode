@@ -17,11 +17,17 @@ import mirrorRoutes from './terminal/mirror-routes.js';
 import settingsRoutes from './settings/routes.js';
 import { syncSessionStatus } from './sessions/service.js';
 import { sidecarManager } from './terminal/sidecar-manager.js';
+import { runMigrations } from './db/migrations.js';
+import { db } from './db/index.js';
+import { randomBytes } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export async function buildApp(opts: any = {}) {
+  // Ensure database is up to date
+  runMigrations();
+
   const { sidecarSocketPath, ...fastifyOpts } = opts;
   const fastify = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : {
@@ -54,7 +60,18 @@ export async function buildApp(opts: any = {}) {
     }, 'Incoming Request');
   });
 
-  const SESSION_SECRET = process.env.SESSION_SECRET ?? 'cloudcode-default-secret-change-in-production';
+  let SESSION_SECRET = process.env.SESSION_SECRET;
+  if (!SESSION_SECRET) {
+    const existingSecret = db.prepare('SELECT value FROM settings WHERE key = ?').get('session_secret') as { value: string } | undefined;
+    if (existingSecret) {
+      SESSION_SECRET = existingSecret.value;
+    } else {
+      SESSION_SECRET = randomBytes(64).toString('hex');
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('session_secret', SESSION_SECRET);
+      fastify.log.info('Generated new persistent SESSION_SECRET and saved to database');
+    }
+  }
+
   const TAILSCALE_ALLOWED_IDENTITIES = process.env.TAILSCALE_ALLOWED_IDENTITIES
     ? process.env.TAILSCALE_ALLOWED_IDENTITIES.split(',').map((s) => s.trim()).filter(Boolean)
     : null;

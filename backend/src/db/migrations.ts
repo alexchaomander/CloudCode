@@ -110,6 +110,12 @@ export function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_logs(event_type);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Migration: Add worktree_path to sessions if it doesn't exist
