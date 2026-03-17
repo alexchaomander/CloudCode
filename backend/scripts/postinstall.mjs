@@ -23,7 +23,7 @@ if (existsSync(dest)) process.exit(0);
 
 if (!platformKey) {
   console.warn(`[cloudcode] Unsupported platform: ${platform}/${arch}. PTY sidecar not installed.`);
-  console.warn('[cloudcode] You can build it manually: cd node_modules/@cloudcode/cli/sidecar && go build -o ../bin/cloudcode-pty-sidecar ./cmd/cloudcode-pty-sidecar');
+  console.warn('[cloudcode] You can build it manually: cd node_modules/@getcloudcode/cli/sidecar && go build -o ../bin/cloudcode-pty-sidecar ./cmd/cloudcode-pty-sidecar');
   process.exit(0);
 }
 
