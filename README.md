@@ -19,9 +19,26 @@ Think of it as a persistent, multiplayer terminal environment. You can start a m
 
 ---
 
-## 📦 Quick Start & Installation
+## 📋 Prerequisites
 
-You'll need `node` (v22+) and `go` (v1.22+) installed on your machine. 
+Before installing CloudCode, ensure you have the following core dependencies installed:
+
+- **Node.js (v22+)**: Powers the backend and CLI. [Download Node.js](https://nodejs.org/).
+- **Go (v1.22+)**: Required to compile the high-performance PTY sidecar. [Download Go](https://go.dev/doc/install) or run `brew install go` (macOS).
+- **tmux**: The terminal multiplexer that keeps your sessions alive. 
+  - *macOS:* `brew install tmux`
+  - *Ubuntu/Debian:* `sudo apt install tmux`
+- **git**: Required for the `--worktree` isolation feature. [Download Git](https://git-scm.com/downloads).
+
+### Optional (For Remote Connectivity)
+To control your agents from your phone outside your local network, you need one of the following:
+
+- **Tailscale**: For highly secure, private remote access. [Install Tailscale](https://tailscale.com/download).
+- **cloudflared**: For zero-config public remote access without a VPN. [Install Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/install-cloudflare-tunnel/).
+
+---
+
+## 📦 Quick Start & Installation
 
 ```bash
 # 1. Clone the repository

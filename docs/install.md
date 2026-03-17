@@ -4,12 +4,21 @@ CloudCode can be installed as a global CLI on your system.
 
 ## Prerequisites
 
-- **Node.js**: v22 or higher
-- **Go**: v1.22 or higher (to build the PTY sidecar)
-- **tmux**: Installed and in your PATH
-- **git**: For worktree support
-- **Tailscale** (Optional): For private remote access
-- **cloudflared** (Optional): For public remote access without a VPN
+Before installing CloudCode, ensure you have the following core dependencies installed:
+
+- **Node.js (v22+)**: Powers the backend and CLI. [Download Node.js](https://nodejs.org/) or use `nvm install 22`.
+- **Go (v1.22+)**: Required to compile the high-performance PTY sidecar. [Download Go](https://go.dev/doc/install) or run `brew install go` (macOS).
+- **tmux**: The terminal multiplexer that keeps your sessions alive. 
+  - *macOS:* `brew install tmux`
+  - *Ubuntu/Debian:* `sudo apt install tmux`
+- **git**: Required for the `--worktree` isolation feature. [Download Git](https://git-scm.com/downloads).
+
+### Optional (For Remote Connectivity)
+CloudCode can be used entirely locally, but to control your agents from your phone, you need one of the following:
+
+- **Tailscale**: For highly secure, private remote access. [Install Tailscale](https://tailscale.com/download). Once installed, run `tailscale up`.
+- **cloudflared**: For zero-config public remote access without a VPN. [Install Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/install-cloudflare-tunnel/).
+  - *macOS:* `brew install cloudflare/cloudflare/cloudflared`
 
 ## Step 1: Clone and Build
 
