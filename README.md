@@ -10,7 +10,7 @@ Start an agent on your laptop, walk away, and check in from your phone or tablet
 
 ## Why CloudCode?
 
-- **Agent agnostic:** Works with Claude Code, Gemini CLI, OpenAI Codex, or any CLI tool.
+- **Agent agnostic:** Works with Claude Code, Gemini CLI, OpenAI Codex, GitHub Copilot CLI, or any CLI tool.
 - **Readable logs:** Intercepts raw terminal output and renders it as formatted Markdown — easier to read on mobile.
 - **QR code pairing:** Scan a QR code from your terminal to authenticate your phone. No passwords or SSH keys.
 - **Persistent sessions:** Sessions run inside `tmux`. Your agent keeps working if your laptop sleeps or your connection drops. Reconnect and pick up where you left off.

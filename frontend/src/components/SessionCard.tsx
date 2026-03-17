@@ -81,7 +81,7 @@ export function SessionCard({ session, onRefresh }: SessionCardProps) {
     e.stopPropagation()
     const message = session.status === 'running' || session.status === 'starting'
       ? 'Delete this session? This will terminate the running process and remove its history.'
-      : 'Delete this session and its snapshots permanently?'
+      : 'Delete this session permanently?'
 
     if (!confirm(message)) return
 

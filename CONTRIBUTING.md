@@ -21,6 +21,7 @@ Thank you for your interest in contributing! This document covers how to get set
 ### Prerequisites
 
 - Node.js 22+
+- Go 1.22+ (required to build the PTY sidecar)
 - tmux
 - Git
 
@@ -63,7 +64,8 @@ CloudCode/
 │       ├── sessions/       # Session lifecycle service and routes
 │       ├── settings/       # App settings
 │       ├── terminal/       # WebSocket terminal + tmux polling
-│       └── tmux/           # tmux subprocess adapter
+│       ├── tmux/           # tmux subprocess adapter
+│       └── utils/          # Shared utilities (path validation, etc.)
 ├── frontend/               # React + Vite + Tailwind app
 │   └── src/
 │       ├── components/     # Shared UI components
@@ -92,7 +94,7 @@ CloudCode/
 
 4. **Commit** with a clear message:
    ```
-   feat: add snapshot export as markdown
+   feat: add session pinning to dashboard
    fix: reconnect terminal WebSocket after phone sleep
    docs: clarify Tailscale identity validation setup
    ```

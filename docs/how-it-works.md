@@ -27,7 +27,7 @@ CloudCode is designed to be used over [Tailscale](https://tailscale.com).
 Because agents are powerful, CloudCode prioritizes transparency:
 *   **Path Sandboxing**: Agents are restricted to specific "Repository Roots" to prevent accidental directory traversal.
 *   **Live Audit Logs**: Every session creation, stop command, and profile change is logged with a timestamp and user ID.
-*   **Snapshots**: You can capture the current state of a terminal pane at any time for later review or debugging.
+*   **Readable Logs**: Session output is processed and rendered as formatted Markdown, giving you a clean, scrollable history of everything the agent did.
 
 ---
 

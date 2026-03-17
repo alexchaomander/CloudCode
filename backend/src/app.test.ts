@@ -115,16 +115,7 @@ describe('API Integration', () => {
     const publicId = res.json().session.publicId;
     expect(tmux.createSession).toHaveBeenCalled();
 
-    // 6. Create a snapshot
-    res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/sessions/${publicId}/snapshots`,
-      headers: { cookie: cookieHeader },
-      payload: { content_text: 'Test snapshot content' }
-    });
-    expect(res.statusCode).toBe(201);
-
-    // 7. Stop session
+    // 6. Stop session
     res = await app.inject({
       method: 'POST',
       url: `/api/v1/sessions/${publicId}/stop`,
@@ -133,7 +124,7 @@ describe('API Integration', () => {
     expect(res.statusCode).toBe(200);
     expect(tmux.sendCtrlC).toHaveBeenCalled();
 
-    // 8. Archive session
+    // 7. Archive session
     res = await app.inject({
       method: 'POST',
       url: `/api/v1/sessions/${publicId}/archive`,
@@ -141,7 +132,7 @@ describe('API Integration', () => {
     });
     expect(res.statusCode).toBe(200);
 
-    // 9. Check audit logs
+    // 8. Check audit logs
     res = await app.inject({
       method: 'GET',
       url: '/api/v1/audit',
@@ -150,7 +141,7 @@ describe('API Integration', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().entries.length).toBeGreaterThan(0);
 
-    // 10. Delete session
+    // 9. Delete session
     res = await app.inject({
       method: 'DELETE',
       url: `/api/v1/sessions/${publicId}`,
@@ -158,7 +149,7 @@ describe('API Integration', () => {
     });
     expect(res.statusCode).toBe(200);
 
-    // 11. Verify session is gone
+    // 10. Verify session is gone
     res = await app.inject({
       method: 'GET',
       url: `/api/v1/sessions/${publicId}`,
