@@ -439,13 +439,9 @@ export async function deleteSession(id: string, userId: string): Promise<void> {
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as (Session & { worktree_path: string | null }) | undefined;
   if (!session) throw new Error(`Session not found: ${id}`);
 
-  if (session.status === 'running' || session.status === 'pending') {
+  const exists = await tmux.hasSession(session.tmux_session_name);
+  if (exists) {
     await tmux.killSession(session.tmux_session_name);
-  } else {
-    const exists = await tmux.hasSession(session.tmux_session_name);
-    if (exists) {
-      await tmux.killSession(session.tmux_session_name);
-    }
   }
 
   // Cleanup worktree
