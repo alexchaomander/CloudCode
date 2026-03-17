@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/sidecar/go.sum
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build sidecar for all platforms
+        run: |
+          npm run build:sidecar:all --workspace=backend
+          # Remove the generic sidecar so postinstall always selects the correct platform binary
+          rm -f backend/bin/cloudcode-pty-sidecar
+
+      - name: Build backend
+        run: npm run build --workspace=backend
+        env:
+          # Skip sidecar build — already built above
+          SKIP_SIDECAR: '1'
+
+      - name: Build frontend
+        run: npm run build --workspace=frontend
+
+      - name: Copy frontend dist into backend
+        run: |
+          rm -rf backend/frontend-dist
+          cp -r frontend/dist backend/frontend-dist
+
+      - name: Sync version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          npm version $VERSION --workspace=backend --no-git-tag-version --allow-same-version
+
+      - name: Publish @humans-of-ai/cloudcode
+        run: npm publish --workspace=backend --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
