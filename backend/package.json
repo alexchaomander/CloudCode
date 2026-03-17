@@ -1,6 +1,6 @@
 {
   "name": "@humans-of-ai/cloudcode",
-  "version": "0.1.1",
+  "version": "0.1.5",
   "description": "CloudCode — Remote control for your local AI coding agents",
   "license": "MIT",
   "type": "module",
