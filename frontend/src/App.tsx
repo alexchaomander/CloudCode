@@ -1,0 +1,138 @@
+import { ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuthContext } from './hooks/useAuth'
+import { Layout } from './components/Layout'
+import { Login } from './pages/Login'
+import { Bootstrap } from './pages/Bootstrap'
+import { Pairing } from './pages/Pairing'
+import { Dashboard } from './pages/Dashboard'
+import { NewSession } from './pages/NewSession'
+import { SessionDetail } from './pages/SessionDetail'
+import { Profiles } from './pages/Profiles'
+import { Repositories } from './pages/Repositories'
+import { Settings } from './pages/Settings'
+import { AuditLog } from './pages/AuditLog'
+
+interface ProtectedRouteProps {
+  children: ReactNode
+}
+
+function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading } = useAuthContext()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <>{children}</>
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public routes (no Layout) */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/bootstrap" element={<Bootstrap />} />
+      <Route path="/pair" element={<Pairing />} />
+
+      {/* Protected routes wrapped in Layout */}
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sessions/new"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <NewSession />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sessions/:id"
+        element={
+          <ProtectedRoute>
+            <SessionDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sessions/mirror/:sessionName"
+        element={
+          <ProtectedRoute>
+            <SessionDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profiles"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Profiles />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/repositories"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Repositories />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Settings />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/audit"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <AuditLog />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Catch-all redirect */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
