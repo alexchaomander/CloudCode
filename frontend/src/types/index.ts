@@ -59,14 +59,6 @@ export interface AuditLog {
   createdAt: string
 }
 
-export interface SessionSnapshot {
-  id: string
-  sessionId: string
-  snapshotType: string
-  contentText: string
-  createdAt: string
-}
-
 export interface DiscoveredProject {
   name: string
   absolutePath: string

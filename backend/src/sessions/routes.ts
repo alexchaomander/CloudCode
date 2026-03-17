@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth/middleware.js';
 import { db } from '../db/index.js';
 import * as tmux from '../tmux/adapter.js';
@@ -17,7 +16,6 @@ import {
   getRecentAgents,
   getRecentPaths,
 } from './service.js';
-import type { SessionSnapshot } from '../db/schema.js';
 
 const sessionCreateSchema = z.object({
   title: z.string().min(1).max(256),
@@ -195,43 +193,6 @@ const sessionRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // GET /api/v1/sessions/:id/snapshots
-  fastify.get('/api/v1/sessions/:id/snapshots', { preHandler: requireAuth }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const session = getSession(id) ?? getSessionByPublicId(id);
-    if (!session) {
-      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
-    }
-    const snapshots = db.prepare(
-      'SELECT * FROM session_snapshots WHERE session_id = ? ORDER BY created_at DESC'
-    ).all(session.id) as SessionSnapshot[];
-    return reply.send({ snapshots });
-  });
-
-  // POST /api/v1/sessions/:id/snapshots - capture current pane content
-  fastify.post('/api/v1/sessions/:id/snapshots', { preHandler: requireAuth }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const session = getSession(id) ?? getSessionByPublicId(id);
-    if (!session) {
-      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
-    }
-
-    let content = '';
-    try {
-      content = await tmux.capturePane(session.tmuxSessionName);
-    } catch {
-      // Session may be stopped; snapshot whatever we have
-    }
-
-    const snapshotId = nanoid();
-    const now = new Date().toISOString();
-    db.prepare(
-      'INSERT INTO session_snapshots (id, session_id, snapshot_type, content_text, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(snapshotId, session.id, 'manual', content, now);
-
-    const snapshot = db.prepare('SELECT * FROM session_snapshots WHERE id = ?').get(snapshotId) as SessionSnapshot;
-    return reply.status(201).send({ snapshot });
-  });
 };
 
 export default sessionRoutes;

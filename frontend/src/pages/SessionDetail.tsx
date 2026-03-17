@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Session, SessionSnapshot } from '../types'
+import { Session } from '../types'
 import { Terminal } from '../components/Terminal'
 import { apiFetch } from '../hooks/useApi'
 
-type Tab = 'terminal' | 'logs' | 'snapshots' | 'info'
+type Tab = 'terminal' | 'logs' | 'info'
 
 interface TerminalBootstrapResponse {
   readableOutput: string
@@ -48,12 +48,8 @@ export function SessionDetail() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('terminal')
   const [session, setSession] = useState<Session | null>(null)
-  const [snapshots, setSnapshots] = useState<SessionSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [capturingSnapshot, setCapturingSnapshot] = useState(false)
-  const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null)
-  const [snapshotSearch, setSnapshotSearch] = useState('')
   const [logOutput, setLogOutput] = useState('')
   const [logsLoading, setLogsLoading] = useState(false)
   const [logsError, setLogsError] = useState<string | null>(null)
@@ -74,7 +70,7 @@ export function SessionDetail() {
       setLoading(false)
       return
     }
-    
+
     if (!id) return
     try {
       const data = await apiFetch<{ session: Session }>(`/api/v1/sessions/${id}`)
@@ -84,16 +80,6 @@ export function SessionDetail() {
       setError(err instanceof Error ? err.message : 'Failed to load session')
     } finally {
       setLoading(false)
-    }
-  }, [id])
-
-  const fetchSnapshots = useCallback(async () => {
-    if (!id) return
-    try {
-      const data = await apiFetch<{ snapshots: SessionSnapshot[] }>(`/api/v1/sessions/${id}/snapshots`)
-      setSnapshots(data.snapshots)
-    } catch {
-      // ignore
     }
   }, [id])
 
@@ -120,10 +106,6 @@ export function SessionDetail() {
   }, [fetchSession])
 
   useEffect(() => {
-    if (activeTab === 'snapshots') fetchSnapshots()
-  }, [activeTab, fetchSnapshots])
-
-  useEffect(() => {
     if (activeTab !== 'logs') {
       if (logsIntervalRef.current) clearInterval(logsIntervalRef.current)
       logsIntervalRef.current = null
@@ -141,33 +123,12 @@ export function SessionDetail() {
     }
   }, [activeTab, fetchLogs])
 
-  const filteredSnapshots = useMemo(() => {
-    if (!snapshotSearch) return snapshots
-    const q = snapshotSearch.toLowerCase()
-    return snapshots.filter(s => s.contentText.toLowerCase().includes(q))
-  }, [snapshots, snapshotSearch])
-
-  const handleCaptureSnapshot = async () => {
-    if (!id) return
-    setCapturingSnapshot(true)
-    setSnapshotMessage(null)
-    try {
-      await apiFetch(`/api/v1/sessions/${id}/snapshots`, { method: 'POST' })
-      setSnapshotMessage('Snapshot captured!')
-      await fetchSnapshots()
-    } catch (err) {
-      setSnapshotMessage(err instanceof Error ? err.message : 'Failed to capture snapshot')
-    } finally {
-      setCapturingSnapshot(false)
-    }
-  }
-
   const handleDeleteSession = async () => {
     if (!session) return
 
     const message = session.status === 'running' || session.status === 'starting'
-      ? 'Delete this session? This will terminate the running process and remove its snapshots.'
-      : 'Delete this session and all of its snapshots permanently?'
+      ? 'Delete this session? This will terminate the running process.'
+      : 'Delete this session permanently?'
 
     if (!confirm(message)) return
 
@@ -181,7 +142,6 @@ export function SessionDetail() {
   ] : [
     { id: 'terminal', label: 'Terminal' },
     { id: 'logs', label: 'Logs' },
-    { id: 'snapshots', label: 'Snapshots' },
     { id: 'info', label: 'Info' },
   ]
 
@@ -308,97 +268,6 @@ export function SessionDetail() {
                   <p className="text-[11px] text-zinc-500 font-mono">No terminal output yet.</p>
                 )}
               </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'snapshots' && (
-          <div className="h-full flex flex-col bg-zinc-950 animate-fade-in">
-            {/* Snapshot Actions & Search */}
-            <div className="p-4 border-b border-zinc-800 space-y-4 bg-zinc-900/50">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em]">History & Rewind</h3>
-                <button
-                  onClick={handleCaptureSnapshot}
-                  disabled={capturingSnapshot}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all tap-feedback"
-                >
-                  {capturingSnapshot ? (
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    </svg>
-                  )}
-                  Take Snapshot
-                </button>
-              </div>
-              
-              <div className="relative">
-                <input
-                  type="text"
-                  value={snapshotSearch}
-                  onChange={e => setSnapshotSearch(e.target.value)}
-                  placeholder="Search history content..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-10 py-2.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500/50 transition-all"
-                />
-                <svg className="absolute left-3.5 top-3 w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </div>
-
-            {snapshotMessage && (
-              <div className={`m-4 px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest border animate-slide-up ${
-                snapshotMessage.includes('!')
-                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-              }`}>
-                {snapshotMessage}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 custom-scrollbar">
-              {filteredSnapshots.length === 0 ? (
-                <div className="text-center py-20 animate-fade-in">
-                  <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center text-2xl mb-4 border border-zinc-800 mx-auto">📸</div>
-                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
-                    {snapshotSearch ? 'No matching history' : 'No history captured'}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {filteredSnapshots.map(snap => (
-                    <div key={snap.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl group transition-all hover:border-zinc-700">
-                      <div className="flex items-center justify-between px-4 py-3 bg-zinc-950/50 border-b border-zinc-800">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-1.5 h-1.5 rounded-full ${snap.snapshotType === 'auto' ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">{snap.snapshotType}</span>
-                        </div>
-                        <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{new Date(snap.createdAt).toLocaleString()}</span>
-                      </div>
-                      <div className="relative">
-                        <pre className="p-5 text-[11px] leading-relaxed text-zinc-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-[400px] overflow-y-auto selection:bg-indigo-500/30 scrollbar-none">
-                          {snap.contentText}
-                        </pre>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(snap.contentText)
-                            setSnapshotMessage('Content copied!')
-                            setTimeout(() => setSnapshotMessage(null), 2000)
-                          }}
-                          className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-md p-2 rounded-lg text-zinc-400 hover:text-white border border-zinc-700"
-                          title="Copy Content"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m-3 8.5l1.5 1.5 3-3" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}
