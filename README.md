@@ -2,6 +2,8 @@
 
 A self-hosted web interface for managing and monitoring local CLI-based AI coding agents — remotely, from any device.
 
+> **CloudCode is not a coding agent.** It is a remote control layer for agents you already have installed and authenticated on your machine. You bring the agent (Claude Code, Gemini CLI, etc.) — CloudCode lets you monitor and interact with it from anywhere.
+
 Start an agent on your laptop, walk away, and check in from your phone or tablet. CloudCode keeps the session alive, renders the output cleanly, and lets you stay in the loop wherever you are.
 
 ---
@@ -110,6 +112,31 @@ cloudcode run custom --command "npx some-ai-tool" --rc
 - **Frontend:** React + Tailwind CSS + xterm.js + react-markdown
 - **PTY engine:** Go-based sidecar that bridges Node.js to UNIX pseudo-terminals
 - **Session multiplexer:** `tmux`
+
+---
+
+## FAQ
+
+**Is CloudCode a coding agent?**
+No. CloudCode does not write code, call AI APIs, or make decisions. It is a remote control interface — a layer that wraps and exposes CLI tools you already have running on your machine. The intelligence comes entirely from the agent you choose to run.
+
+**Do I need an API key or AI subscription to use CloudCode?**
+Not for CloudCode itself. However, the coding agents you run through it (Claude Code, Gemini CLI, etc.) require their own authentication, API keys, and subscriptions. Set those up first, verify they work in your terminal, then use CloudCode to manage them remotely.
+
+**Which coding agents are supported?**
+Any CLI tool. CloudCode has built-in profiles for Claude Code, Gemini CLI, and OpenAI Codex, but you can run any command-line program using the `custom` profile. If it runs in a terminal, CloudCode can manage it.
+
+**Does my code or terminal output get sent to CloudCode servers?**
+No. CloudCode is entirely self-hosted — it runs on your own machine and your data never leaves your network (unless you explicitly use a Cloudflare tunnel for remote access, in which case traffic passes through Cloudflare's infrastructure).
+
+**Why does CloudCode require Go?**
+CloudCode uses a small Go-based sidecar to interface with UNIX pseudo-terminals (PTYs). Node.js cannot do this reliably natively. The sidecar is compiled once during installation and runs transparently in the background.
+
+**What happens if my laptop goes to sleep while an agent is running?**
+The agent keeps running. Sessions are managed by `tmux`, which is independent of CloudCode's web server. Your agent's process continues as long as the machine is powered on. When you reconnect, CloudCode picks the session back up.
+
+**Can I run multiple agents at the same time?**
+Yes. Each session is an independent `tmux` window. You can run as many concurrent sessions as your machine can handle and manage them all from the dashboard.
 
 ---
 
