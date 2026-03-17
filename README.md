@@ -29,7 +29,7 @@ Start an agent on your laptop, walk away, and check in from your phone or tablet
 ### Optional (for remote access outside your local network)
 
 - **Tailscale** — private, secure remote access: [Install Tailscale](https://tailscale.com/download)
-- **cloudflared** — public tunnel without a VPN: [Install Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/install-cloudflare-tunnel/)
+- **cloudflared** — public tunnel without a VPN: [Install Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/)
 
 ---
 
