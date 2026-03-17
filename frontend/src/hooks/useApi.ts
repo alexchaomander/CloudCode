@@ -11,7 +11,7 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options?.headers ?? {}),
     },
     credentials: 'include',
@@ -21,7 +21,7 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
     let message = `HTTP ${response.status}`
     try {
       const body = await response.json()
-      message = body.error ?? body.message ?? message
+      message = body.message ?? body.error ?? message
     } catch {
       // ignore parse error
     }

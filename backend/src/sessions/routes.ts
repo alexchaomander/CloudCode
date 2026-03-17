@@ -189,8 +189,9 @@ const sessionRoutes: FastifyPluginAsync = async (fastify) => {
       await deleteSession(session.id, request.userId!);
       return reply.send({ message: 'Session deleted' });
     } catch (err) {
+      fastify.log.error({ err }, 'DELETE SESSION FAILED');
       const message = err instanceof Error ? err.message : 'Failed to delete session';
-      return reply.status(400).send({ error: 'Bad Request', message });
+      return reply.status(500).send({ error: 'Internal Server Error', message });
     }
   });
 
