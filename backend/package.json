@@ -1,0 +1,54 @@
+{
+  "name": "cloudcode",
+  "version": "0.1.0",
+  "description": "CloudCode — Secure remote control for your local coding environment",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "cloudcode": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "frontend-dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "dev:cli": "tsx src/cli.ts start",
+    "build": "tsc && npm run build:sidecar",
+    "build:sidecar": "mkdir -p bin && cd sidecar && go build -o ../bin/cloudcode-pty-sidecar ./cmd/cloudcode-pty-sidecar",
+    "bundle": "npm run build && cd ../frontend && npm run build && cd ../backend && rm -rf frontend-dist && cp -r ../frontend/dist ./frontend-dist",
+    "start": "node dist/index.js",
+    "migrate": "tsx src/db/migrations.ts",
+    "test": "vitest run src/"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^9.0.0",
+    "@fastify/websocket": "^11.2.0",
+    "@xterm/headless": "^6.0.0",
+    "argon2": "^0.41.1",
+    "better-sqlite3": "^11.8.1",
+    "chalk": "^4.1.2",
+    "commander": "^12.1.0",
+    "fastify": "^5.8.2",
+    "nanoid": "^5.0.7",
+    "pino": "^8.19.0",
+    "pino-pretty": "^11.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.12.7",
+    "@types/qrcode-terminal": "^0.12.2",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.0"
+  }
+}

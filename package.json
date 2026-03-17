@@ -1,0 +1,43 @@
+{
+  "name": "cloudcode",
+  "version": "0.1.0",
+  "description": "Self-hosted, mobile-first web interface for managing local CLI-based coding agents over Tailscale",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexchaomander/CloudCode.git"
+  },
+  "homepage": "https://github.com/alexchaomander/CloudCode#readme",
+  "engines": {
+    "node": ">=22"
+  },
+  "bugs": {
+    "url": "https://github.com/alexchaomander/CloudCode/issues"
+  },
+  "keywords": [
+    "coding-agent",
+    "claude-code",
+    "tmux",
+    "tailscale",
+    "self-hosted",
+    "terminal",
+    "mobile"
+  ],
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "migrate": "npm run migrate --workspace=backend",
+    "start": "npm run start --workspace=backend",
+    "install:cli": "npm run bundle --workspace=backend && npm install -g ./backend",
+    "restart": "lsof -ti:3000,3333 | xargs kill -9 2>/dev/null || true && npm run build && npm start"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "concurrently": "^8.2.2"
+  }
+}
