@@ -16,14 +16,27 @@ This is the equivalent of `claude remote-control`. It starts the CloudCode backg
 This is the equivalent of the `/rc` command. Run this command inside any existing `tmux` session on your machine. It will communicate with the CloudCode backend and generate a pairing QR code for that specific session.
 - **Best for:** When you're in the middle of a terminal session and realize you need to switch to mobile.
 
-## Connectivity Options
+## 🌐 How to Connect (Networking Explained Simply)
 
-CloudCode supports two primary ways to connect remotely without opening firewall ports:
+Depending on where you are and how much setup you want to do, CloudCode has three ways to let your phone talk to your computer. You don't need to be a networking expert to use them:
 
-| Method | Flag | Description |
-| :--- | :--- | :--- |
-| **Tailscale** | (Automatic) | If Tailscale is running, CloudCode uses your private Tailnet URL. Most secure and recommended. |
-| **Cloudflare** | `--tunnel` | Uses `cloudflared` to create a public temporary relay. Works behind any firewall without a VPN. |
+### 1. The "Home Wi-Fi" Method (Easiest)
+If you just want to control your laptop from the couch, you don't need any extra software.
+- **How it works:** CloudCode finds your computer's local IP address (like `192.168.1.x`) and puts it in the QR code.
+- **Requirements:** Your phone and laptop **must be on the exact same Wi-Fi network**.
+- **Command:** `cloudcode run gemini-cli --rc`
+
+### 2. The "Coffee Shop" Method (Connect from anywhere, no VPN)
+If you want to leave your laptop at home and connect to it from a coffee shop, but you don't want to deal with complex VPN setups.
+- **How it works:** CloudCode spins up a secure, temporary Cloudflare tunnel. Your QR code will point to a public web address (like `https://random-words.trycloudflare.com`), but it remains secure because your phone needs the secret token inside the QR code to log in.
+- **Requirements:** You must install the `cloudflared` tool on your laptop.
+- **Command:** `cloudcode run gemini-cli --rc --tunnel`
+
+### 3. The "Private Network" Method (Most Secure)
+If you want enterprise-grade security and the ability to connect from anywhere, without exposing any public web links.
+- **How it works:** Tailscale creates a private, invisible mesh network between your devices. CloudCode automatically detects it and uses your secure `*.ts.net` address.
+- **Requirements:** Both your laptop and your phone must have the [Tailscale](https://tailscale.com) app installed and turned on.
+- **Command:** `cloudcode run gemini-cli --rc` (it automatically detects Tailscale!)
 
 ## Magic Pairing
 
