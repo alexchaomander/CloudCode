@@ -55,7 +55,7 @@ jobs:
           npm version $VERSION --workspace=packages/cloudcode --no-git-tag-version
           node backend/scripts/sync-version.mjs $VERSION
 
-      - name: Publish @getcloudcode/cli
+      - name: Publish @humans-of-ai/cloudcode
         run: npm publish --workspace=backend --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

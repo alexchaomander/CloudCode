@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Updates the @getcloudcode/cli version pin inside packages/cloudcode/package.json
+// Updates the @humans-of-ai/cloudcode version pin inside packages/cloudcode/package.json
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,6 @@ const shimPkgPath = join(
 );
 
 const pkg = JSON.parse(readFileSync(shimPkgPath, 'utf8'));
-pkg.dependencies['@getcloudcode/cli'] = version;
+pkg.dependencies['@humans-of-ai/cloudcode'] = version;
 writeFileSync(shimPkgPath, JSON.stringify(pkg, null, 2) + '\n');
-console.log(`Updated @getcloudcode/cli → ${version} in cloudcode shim`);
+console.log(`Updated @humans-of-ai/cloudcode → ${version} in cloudcode shim`);
