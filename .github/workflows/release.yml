@@ -53,16 +53,16 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           npm version $VERSION --workspace=backend --no-git-tag-version
           npm version $VERSION --workspace=packages/cloudcode --no-git-tag-version
-          # Keep @cloudcode/cli peer dep in shim in sync
+          # Keep @getcloudcode/cli peer dep in shim in sync
           cd packages/cloudcode
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.dependencies['@cloudcode/cli'] = '$VERSION';
+            pkg.dependencies['@getcloudcode/cli'] = '$VERSION';
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      - name: Publish @cloudcode/cli
+      - name: Publish @getcloudcode/cli
         run: npm publish --workspace=backend --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,7 +1,7 @@
 {
   "name": "cloudcode",
   "version": "0.1.0",
-  "description": "CloudCode — Remote control for your local AI coding agents (installs @cloudcode/cli)",
+  "description": "CloudCode — Remote control for your local AI coding agents (installs @getcloudcode/cli)",
   "license": "MIT",
   "bin": {
     "cloudcode": "bin/cloudcode.mjs"
@@ -13,6 +13,6 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@cloudcode/cli": "0.1.0"
+    "@getcloudcode/cli": "0.1.0"
   }
 }
