@@ -60,16 +60,22 @@ cloudcode run gemini-cli --rc
 ## Installation
 
 ```bash
-# 1. Clone the repository
+npm install -g cloudcode
+```
+
+Verify the install:
+
+```bash
+cloudcode --version
+```
+
+### Build from source
+
+```bash
 git clone https://github.com/alexchaomander/CloudCode.git
 cd CloudCode
-
-# 2. Build and install the CLI
 npm install
 npm run install:cli
-
-# 3. Verify the install
-cloudcode --version
 ```
 
 ---

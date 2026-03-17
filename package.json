@@ -26,14 +26,15 @@
   "private": false,
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "packages/*"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "migrate": "npm run migrate --workspace=backend",
     "start": "npm run start --workspace=backend",
-    "install:cli": "npm run bundle --workspace=backend && npm install -g ./backend",
+    "install:cli": "npm run bundle --workspace=backend && npm install -g ./backend && npm install -g ./packages/cloudcode",
     "restart": "lsof -ti:3000,3333 | xargs kill -9 2>/dev/null || true && npm run build && npm start"
   },
   "devDependencies": {
