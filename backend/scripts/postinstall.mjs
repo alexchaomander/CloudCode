@@ -2,6 +2,7 @@
 import { copyFileSync, chmodSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const binDir = join(__dirname, '..', 'bin');
@@ -33,4 +34,14 @@ if (!existsSync(src)) {
 
 copyFileSync(src, dest);
 chmodSync(dest, 0o755);
+
+// On macOS, ad-hoc sign the binary so Gatekeeper allows it to run
+if (platform === 'darwin') {
+  try {
+    execFileSync('codesign', ['--force', '--sign', '-', dest], { stdio: 'ignore' });
+  } catch {
+    // codesign unavailable — binary may still run if the system allows it
+  }
+}
+
 console.log(`[cloudcode] PTY sidecar installed for ${platformKey}`);

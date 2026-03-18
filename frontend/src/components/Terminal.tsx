@@ -14,9 +14,9 @@ interface TerminalProps {
 }
 
 const XTERM_THEME = {
-  background: 'transparent', // Transparent to show the glass frame background
-  foreground: '#f4f4f5', // zinc-100
-  cursor: '#6366f1', // indigo-500
+  background: 'transparent',
+  foreground: '#f4f4f5',
+  cursor: '#6366f1',
   cursorAccent: '#09090b',
   black: '#18181b',
   red: '#f43f5e',
@@ -50,6 +50,13 @@ type KeybarButton = {
   highlight?: boolean
 }
 
+const FONT_SIZE_MIN = 9
+const FONT_SIZE_MAX = 24
+const FONT_SIZE_DEFAULT = window.innerWidth < 768 ? 14 : 13
+
+// True when phone is in landscape (tablets excluded via max-height)
+const LANDSCAPE_MQ = '(orientation: landscape) and (max-height: 500px)'
+
 export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
@@ -57,7 +64,7 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const [terminalInstance, setTerminalInstance] = useState<XTerm | null>(null)
   const { isConnected, bootState, sendInput, resize } = useTerminal({ sessionId, terminal: terminalInstance })
-  
+
   const [ctrlMode, setCtrlMode] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -65,11 +72,21 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   const [historyLoading, setHistoryLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [ghostInput, setGhostInput] = useState('')
+  const [fontSize, setFontSize] = useState(FONT_SIZE_DEFAULT)
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  const [hasNewOutput, setHasNewOutput] = useState(false)
+  const [isLandscape, setIsLandscape] = useState(
+    () => window.matchMedia(LANDSCAPE_MQ).matches
+  )
+
   const inputRef = useRef<HTMLInputElement>(null)
   const terminalShellRef = useRef<HTMLDivElement>(null)
   const touchStateRef = useRef<{ y: number; accumulated: number; velocity: number; lastTs: number; pointerId: number | null } | null>(null)
+  const pinchRef = useRef<{ dist: number; fontSize: number } | null>(null)
   const momentumFrameRef = useRef<number | null>(null)
   const railDragRef = useRef<{ top: number; height: number } | null>(null)
+  const prevBaseYRef = useRef(0)
+  const didScrollRef = useRef(false) // guards onClick from firing after a scroll gesture
   const [scrollMetrics, setScrollMetrics] = useState({ viewportY: 0, baseY: 0 })
 
   const bootCopy = (() => {
@@ -101,21 +118,16 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   useEffect(() => {
     if (!containerRef.current) return
 
-    // Intercept all console methods to definitively silence noisy xterm warnings
     const methods: Array<keyof Console> = ['log', 'warn', 'error', 'info'];
     const originals: any = {};
-    
     methods.forEach(m => {
       originals[m] = console[m];
       (console as any)[m] = (...args: any[]) => {
         const firstArg = args[0];
-        const isXtermMsg = typeof firstArg === 'string' && 
+        const isXtermMsg = typeof firstArg === 'string' &&
           (firstArg.includes('xterm.js') || firstArg.includes('Parsing error'));
-        
-        // Also check objects if xterm logs the parser state directly
-        const isXtermObj = !isXtermMsg && firstArg && typeof firstArg === 'object' && 
+        const isXtermObj = !isXtermMsg && firstArg && typeof firstArg === 'object' &&
           (firstArg.params || firstArg.currentState !== undefined);
-
         if (isXtermMsg || isXtermObj) return;
         originals[m].apply(console, args);
       };
@@ -124,26 +136,23 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
     const term = new XTerm({
       theme: XTERM_THEME,
       fontFamily: '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", Menlo, Monaco, Consolas, monospace',
-      fontSize: 13,
-      lineHeight: 1.4,
-      letterSpacing: 0,
+      fontSize: FONT_SIZE_DEFAULT,
+      lineHeight: 1.5,
+      letterSpacing: 0.4,
       cursorBlink: true,
       cursorStyle: 'block',
       scrollback: 10000,
-      allowTransparency: true, // Crucial for glass effect
+      allowTransparency: true,
       convertEol: false,
       logLevel: 'off',
       rightClickSelectsWord: true,
     })
 
-    // Silence internal xterm.js parsing error reporting
     try {
       if ((term as any)._core && (term as any)._core._onBinary) {
         (term as any)._core._onBinary.fire = () => {};
       }
-    } catch (e) {
-      // Ignore if core internals change
-    }
+    } catch (e) { /* ignore */ }
 
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon()
@@ -154,13 +163,8 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
     term.loadAddon(searchAddon)
 
     term.open(containerRef.current)
-    
-    // Ensure fitting on next tick
-    setTimeout(() => {
-      fitAddon.fit()
-    }, 0)
+    setTimeout(() => { fitAddon.fit() }, 0)
 
-    // Copy on selection
     term.onSelectionChange(() => {
       const sel = term.getSelection()
       if (sel) navigator.clipboard.writeText(sel).catch(() => {})
@@ -184,38 +188,54 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
     }
   }, [])
 
-  // Auto-focus terminal or ghost input
+  // Auto-focus desktop xterm only — on mobile, don't auto-open keyboard on session load
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (window.innerWidth < 768) {
-        // On mobile, focus our custom input
-        inputRef.current?.focus()
-      } else {
-        xtermRef.current?.focus()
-      }
-    }, 150)
-    return () => clearTimeout(timer)
+    if (window.innerWidth >= 768) {
+      const timer = setTimeout(() => { xtermRef.current?.focus() }, 150)
+      return () => clearTimeout(timer)
+    }
   }, [terminalInstance])
 
   // ResizeObserver for auto-fit
   useEffect(() => {
     if (!containerRef.current) return
-
     const observer = new ResizeObserver(() => {
       if (fitAddonRef.current && xtermRef.current) {
         try {
           fitAddonRef.current.fit()
           const dims = fitAddonRef.current.proposeDimensions()
           if (dims) resize(dims.cols, dims.rows)
-        } catch {
-          // ignore
-        }
+        } catch { /* ignore */ }
       }
     })
-
     observer.observe(containerRef.current)
     return () => observer.disconnect()
   }, [resize])
+
+  // visualViewport: refit when soft keyboard opens/closes on mobile
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const refit = () => {
+      setTimeout(() => {
+        try {
+          fitAddonRef.current?.fit()
+          const dims = fitAddonRef.current?.proposeDimensions()
+          if (dims) resize(dims.cols, dims.rows)
+        } catch { /* ignore */ }
+      }, 50)
+    }
+    vv.addEventListener('resize', refit)
+    return () => vv.removeEventListener('resize', refit)
+  }, [resize])
+
+  // Landscape orientation detection
+  useEffect(() => {
+    const mq = window.matchMedia(LANDSCAPE_MQ)
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   // Wire terminal input
   useEffect(() => {
@@ -250,9 +270,7 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
         haptic()
         sendInput(text)
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, [sendInput])
 
   const toggleCtrl = useCallback(() => {
@@ -311,10 +329,22 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   const syncScrollMetrics = useCallback(() => {
     const term = xtermRef.current
     if (!term) return
-    setScrollMetrics({
-      viewportY: term.buffer.active.viewportY,
-      baseY: term.buffer.active.baseY,
-    })
+
+    const viewportY = term.buffer.active.viewportY
+    const baseY = term.buffer.active.baseY
+    const atBottom = viewportY >= baseY
+
+    // Detect new content arriving while user is scrolled up
+    if (baseY > prevBaseYRef.current && !atBottom) {
+      setHasNewOutput(true)
+    }
+    if (atBottom) {
+      setHasNewOutput(false)
+    }
+    prevBaseYRef.current = baseY
+
+    setIsAtBottom(atBottom)
+    setScrollMetrics({ viewportY, baseY })
   }, [])
 
   const scrollPageUp = useCallback(() => {
@@ -335,7 +365,25 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   const scrollToBottom = useCallback(() => {
     haptic()
     xtermRef.current?.scrollToBottom()
+    setHasNewOutput(false)
   }, [])
+
+  const changeFontSize = useCallback((delta: number) => {
+    setFontSize(prev => Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, prev + delta)))
+  }, [])
+
+  // Apply font size changes to live xterm
+  useEffect(() => {
+    const term = xtermRef.current
+    const fitAddon = fitAddonRef.current
+    if (!term || !fitAddon) return
+    term.options.fontSize = fontSize
+    try {
+      fitAddon.fit()
+      const dims = fitAddon.proposeDimensions()
+      if (dims) resize(dims.cols, dims.rows)
+    } catch { /* ignore */ }
+  }, [fontSize, resize])
 
   const stopMomentum = useCallback(() => {
     if (momentumFrameRef.current !== null) {
@@ -350,9 +398,9 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
     const state = touchStateRef.current
     if (!state) return
 
-    const fontSize = typeof term.options.fontSize === 'number' ? term.options.fontSize : 13
-    const lineHeight = typeof term.options.lineHeight === 'number' ? term.options.lineHeight : 1.4
-    const lineHeightPx = Math.max(18, Math.round(fontSize * lineHeight))
+    const fs = typeof term.options.fontSize === 'number' ? term.options.fontSize : 13
+    const lh = typeof term.options.lineHeight === 'number' ? term.options.lineHeight : 1.4
+    const lineHeightPx = Math.max(18, Math.round(fs * lh))
 
     state.accumulated += deltaY
     const lines = Math.trunc(state.accumulated / lineHeightPx)
@@ -394,13 +442,22 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   }, [terminalInstance, syncScrollMetrics])
 
   useEffect(() => {
-    return () => {
-      stopMomentum()
-    }
+    return () => { stopMomentum() }
   }, [stopMomentum])
 
+  // Single-touch scroll — cancel if second finger lands (let pinch take over)
   const handleShellPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'touch') return
+
+    didScrollRef.current = false // reset scroll guard on each new touch
+
+    if (touchStateRef.current) {
+      // Second finger down: cancel scroll so pinch-to-zoom works cleanly
+      stopMomentum()
+      touchStateRef.current = null
+      return
+    }
+
     stopMomentum()
     event.currentTarget.setPointerCapture(event.pointerId)
     touchStateRef.current = {
@@ -415,6 +472,9 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   const handleShellPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const state = touchStateRef.current
     if (!state || state.pointerId !== event.pointerId) return
+    if (pinchRef.current) return // pinch in progress, don't scroll
+
+    didScrollRef.current = true // mark that actual scrolling occurred
 
     const now = performance.now()
     const deltaY = event.clientY - state.y
@@ -449,6 +509,32 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
     ? (scrollMetrics.viewportY / scrollMetrics.baseY) * (1 - scrollThumbHeight)
     : 0
 
+  // Pinch-to-zoom
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      pinchRef.current = { dist: Math.hypot(dx, dy), fontSize }
+      e.preventDefault()
+    }
+  }, [fontSize])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && pinchRef.current) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      const dist = Math.hypot(dx, dy)
+      const scale = dist / pinchRef.current.dist
+      const next = Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(pinchRef.current.fontSize * scale)))
+      setFontSize(next)
+      e.preventDefault()
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    pinchRef.current = null
+  }, [])
+
   const handleRailPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const rail = event.currentTarget
     rail.setPointerCapture(event.pointerId)
@@ -476,8 +562,9 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
     railDragRef.current = null
   }, [])
 
-  // Primary keybar
   const primaryKeys: KeybarButton[] = [
+    { label: 'A+', title: 'Increase font size', action: () => changeFontSize(1) },
+    { label: 'A-', title: 'Decrease font size', action: () => changeFontSize(-1) },
     { label: 'SEARCH', title: 'Find text', action: toggleSearch, highlight: showSearch },
     { label: 'HISTORY', title: 'Open full output history', action: toggleHistory, highlight: showHistory },
     { label: 'TOP', title: 'Scroll to top', action: scrollToTop },
@@ -570,11 +657,11 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
         </div>
       )}
 
-      {/* Terminal Area with Glass Frame */}
-      <div className="flex-1 flex flex-col p-3 pb-0 relative overflow-hidden">
-        <div className="flex-1 flex flex-col glass-panel rounded-2xl overflow-hidden">
-          {/* Terminal Header */}
-          <div className="h-9 px-4 flex items-center justify-between bg-white/5 border-b border-white/5 flex-shrink-0">
+      {/* Terminal Area */}
+      <div className="flex-1 flex flex-col p-1 pb-0 sm:p-3 sm:pb-0 relative overflow-hidden">
+        <div className="flex-1 flex flex-col glass-panel rounded-xl sm:rounded-2xl overflow-hidden">
+          {/* Terminal Header — desktop only */}
+          <div className="hidden sm:flex h-9 px-4 items-center justify-between bg-white/5 border-b border-white/5 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="flex gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-rose-500/50" />
@@ -589,37 +676,29 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
                   onPointerDown={(e) => { e.preventDefault(); scrollToTop() }}
                   className="px-2 h-7 rounded-lg bg-zinc-800/60 hover:bg-zinc-700 text-[9px] font-bold tracking-widest text-zinc-400"
                   title="Scroll to top"
-                >
-                  TOP
-                </button>
+                >TOP</button>
                 <button
                   onPointerDown={(e) => { e.preventDefault(); scrollPageUp() }}
                   className="px-2 h-7 rounded-lg bg-zinc-800/60 hover:bg-zinc-700 text-[9px] font-bold tracking-widest text-zinc-400"
                   title="Scroll up"
-                >
-                  PGUP
-                </button>
+                >PGUP</button>
                 <button
                   onPointerDown={(e) => { e.preventDefault(); scrollPageDown() }}
                   className="px-2 h-7 rounded-lg bg-zinc-800/60 hover:bg-zinc-700 text-[9px] font-bold tracking-widest text-zinc-400"
                   title="Scroll down"
-                >
-                  PGDN
-                </button>
+                >PGDN</button>
                 <button
                   onPointerDown={(e) => { e.preventDefault(); scrollToBottom() }}
                   className="px-2 h-7 rounded-lg bg-zinc-800/60 hover:bg-zinc-700 text-[9px] font-bold tracking-widest text-zinc-400"
                   title="Scroll to bottom"
-                >
-                  END
-                </button>
+                >END</button>
               </div>
               <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
               <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{isConnected ? 'Live' : 'Syncing'}</span>
             </div>
           </div>
 
-          {/* xterm instance with internal padding */}
+          {/* xterm instance */}
           <div
             ref={terminalShellRef}
             className="flex-1 p-3 min-h-0 relative touch-none"
@@ -627,6 +706,9 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
             onPointerMove={handleShellPointerMove}
             onPointerUp={handleShellPointerEnd}
             onPointerCancel={handleShellPointerEnd}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             {bootCopy && (
               <div className="absolute inset-0 z-30 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.14),rgba(9,9,11,0.72)_45%,rgba(9,9,11,0.9)_100%)] backdrop-blur-[6px]">
@@ -657,10 +739,26 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
               ref={containerRef}
               className="w-full h-full xterm-container"
               onClick={() => {
+                if (didScrollRef.current) return // don't steal focus after a scroll gesture
                 if (window.innerWidth >= 768) xtermRef.current?.focus()
                 else inputRef.current?.focus()
               }}
             />
+
+            {/* Scroll-to-bottom button — appears when user is scrolled up */}
+            {!isAtBottom && (
+              <button
+                onPointerDown={(e) => { e.preventDefault(); scrollToBottom() }}
+                className={`absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-4 h-8 rounded-full border text-[10px] font-bold uppercase tracking-widest shadow-xl transition-all ${
+                  hasNewOutput
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-indigo-600/40 animate-bounce'
+                    : 'bg-zinc-900/90 backdrop-blur-md border-white/10 text-zinc-300'
+                }`}
+              >
+                {hasNewOutput ? 'New output' : 'Bottom'} ↓
+              </button>
+            )}
+
             {scrollMetrics.baseY > 0 && (
               <>
                 <div className={`pointer-events-none absolute left-3 right-6 top-3 h-10 bg-gradient-to-b from-zinc-950/70 to-transparent transition-opacity ${scrollMetrics.viewportY > 0 ? 'opacity-100' : 'opacity-0'}`} />
@@ -682,40 +780,15 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
                     />
                   </div>
                 </div>
-                <div className="absolute left-5 top-5 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/5 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-zinc-400">
-                  {Math.round((scrollMetrics.viewportY / Math.max(1, scrollMetrics.baseY)) * 100)}%
-                </div>
+                {!isAtBottom && (
+                  <div className="absolute left-5 top-5 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/5 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-zinc-400">
+                    {Math.round((scrollMetrics.viewportY / Math.max(1, scrollMetrics.baseY)) * 100)}%
+                  </div>
+                )}
               </>
             )}
           </div>
         </div>
-      </div>
-
-      {/* Ghost Input - Modern Chat-like field */}
-      <div className="p-3 pt-2 animate-slide-up flex-shrink-0">
-        <form onSubmit={handleGhostSubmit} className="relative group">
-          <input
-            ref={inputRef}
-            type="text"
-            value={ghostInput}
-            onChange={e => setGhostInput(e.target.value)}
-            placeholder="Type a command or message..."
-            className="w-full bg-zinc-900/80 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-4 pr-14 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 transition-all shadow-xl"
-          />
-          <button
-            type="submit"
-            disabled={!ghostInput}
-            className={`absolute right-2 top-2 bottom-2 px-4 rounded-xl transition-all flex items-center justify-center ${
-              ghostInput 
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 active:scale-90' 
-                : 'bg-zinc-800 text-zinc-600 opacity-50'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
-          </button>
-        </form>
       </div>
 
       {/* Ctrl-mode letter picker */}
@@ -747,28 +820,119 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
         </div>
       )}
 
-      {/* Mobile keybar */}
-      <div className="flex items-center bg-zinc-900/90 backdrop-blur-md border-t border-white/5 h-14 px-2 safe-bottom flex-shrink-0">
-        <div className="flex overflow-x-auto py-2 gap-2 flex-1 no-scrollbar scroll-smooth">
-          {primaryKeys.map((btn, i) => (
+      {/* Bottom controls — landscape: single compact row, portrait: input + keybar */}
+      {isLandscape ? (
+        <div className="flex items-center gap-2 px-2 bg-zinc-900/90 backdrop-blur-md border-t border-white/5 h-11 safe-bottom flex-shrink-0">
+          <form onSubmit={handleGhostSubmit} className="flex gap-1.5 w-40 flex-shrink-0">
+            <input
+              ref={inputRef}
+              type="text"
+              value={ghostInput}
+              onChange={e => setGhostInput(e.target.value)}
+              placeholder="Command..."
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="send"
+              inputMode="text"
+              className="flex-1 min-w-0 bg-zinc-800/80 border border-white/10 rounded-xl px-3 h-8 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50"
+            />
             <button
-              key={i}
-              title={btn.title}
-              onPointerDown={(e) => {
-                e.preventDefault()
-                handleKeybarAction(btn.action)
-              }}
-              className={`flex-shrink-0 h-10 px-4 rounded-xl text-[10px] font-bold tracking-widest select-none transition-all tap-feedback border ${
-                btn.highlight
-                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-600/20'
-                  : 'bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 border-white/5'
+              type="submit"
+              disabled={!ghostInput}
+              className={`h-8 px-2.5 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
+                ghostInput ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-600 opacity-50'
               }`}
             >
-              {btn.label}
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </svg>
             </button>
-          ))}
+          </form>
+          <div className="relative flex-1 overflow-hidden">
+            <div className="flex overflow-x-auto gap-1.5 no-scrollbar">
+              {primaryKeys.map((btn, i) => (
+                <button
+                  key={i}
+                  title={btn.title}
+                  onPointerDown={(e) => { e.preventDefault(); handleKeybarAction(btn.action) }}
+                  className={`flex-shrink-0 h-8 px-3 rounded-lg text-[9px] font-bold tracking-widest select-none transition-all tap-feedback border ${
+                    btn.highlight
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 border-white/5'
+                  }`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-900/90 to-transparent" />
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Ghost Input */}
+          <div className="p-3 pt-2 animate-slide-up flex-shrink-0">
+            <form onSubmit={handleGhostSubmit} className="relative group">
+              <input
+                ref={inputRef}
+                type="text"
+                value={ghostInput}
+                onChange={e => setGhostInput(e.target.value)}
+                placeholder="Type a command or message..."
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                enterKeyHint="send"
+                inputMode="text"
+                className="w-full bg-zinc-900/80 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-4 pr-14 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 transition-all shadow-xl"
+              />
+              <button
+                type="submit"
+                disabled={!ghostInput}
+                className={`absolute right-2 top-2 bottom-2 px-4 rounded-xl transition-all flex items-center justify-center ${
+                  ghostInput
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 active:scale-90'
+                    : 'bg-zinc-800 text-zinc-600 opacity-50'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </button>
+            </form>
+          </div>
+
+          {/* Mobile keybar */}
+          <div className="flex items-center bg-zinc-900/90 backdrop-blur-md border-t border-white/5 h-14 px-2 safe-bottom flex-shrink-0">
+            <div className="relative flex-1 overflow-hidden">
+              <div className="flex overflow-x-auto py-2 gap-2 no-scrollbar scroll-smooth">
+                {primaryKeys.map((btn, i) => (
+                  <button
+                    key={i}
+                    title={btn.title}
+                    onPointerDown={(e) => {
+                      e.preventDefault()
+                      handleKeybarAction(btn.action)
+                    }}
+                    className={`flex-shrink-0 h-10 px-4 rounded-xl text-[10px] font-bold tracking-widest select-none transition-all tap-feedback border ${
+                      btn.highlight
+                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-600/20'
+                        : 'bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 border-white/5'
+                    }`}
+                  >
+                    {btn.label}
+                  </button>
+                ))}
+              </div>
+              {/* Right-edge fade — hints that more buttons exist off-screen */}
+              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-900/90 to-transparent" />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
