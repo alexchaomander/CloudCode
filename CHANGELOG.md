@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.6] — 2026-03-18
+
+### Fixed
+
+- macOS Gatekeeper now allows the PTY sidecar to run — Go binaries are ad-hoc signed via `codesign --force --sign -` in `postinstall.mjs` and in the local build scripts
+
+### Improved
+
+- **Pinch-to-zoom**: two-finger pinch scales terminal font size (9–24px); A+ / A- keybar buttons for tap-based adjustment
+- **Soft keyboard layout**: `interactive-widget=resizes-content` viewport meta + `visualViewport` resize listener keeps the terminal correctly sized when the iOS/Android keyboard opens and closes
+- **Landscape mode**: ghost input and keybar collapse into a single 44px row on phones in landscape, giving ~80px more terminal height
+- **Scroll-to-bottom indicator**: floating button appears when scrolled up; pulses with "New output" label when the agent produces output while you are reading earlier history
+- **Ghost input**: `autoCorrect`, `autoCapitalize`, `spellCheck` suppressed so iOS does not mangle terminal commands; `enterKeyHint="send"` on the keyboard
+- **Pinch/scroll conflict**: second touch cancels the active scroll gesture so pinch-to-zoom always registers cleanly
+- **Scroll focus guard**: tapping to open the keyboard no longer fires after a scroll gesture ends
+- **Keybar discoverability**: right-edge fade gradient hints that more buttons exist off-screen
+- **Scroll position indicator**: only shown when scrolled up, not redundantly at the bottom
+- **Safe area insets**: keybar clears the iPhone home-bar gesture zone via `env(safe-area-inset-bottom)`
+- **xterm viewport**: `touch-action: none` prevents browser native scroll from conflicting with the pointer-event scroll handler
+- Terminal header hidden on mobile to maximise screen real estate
+
+---
+
 ## [0.1.0] — 2025-01-01
 
 ### Added
