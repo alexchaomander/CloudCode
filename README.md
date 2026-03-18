@@ -153,3 +153,7 @@ Yes. Each session is an independent `tmux` window. You can run as many concurren
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+Built by [Alex Chao](https://github.com/alexchaomander) · [Twitter/X](http://twitter.com/alexchaomander) · [LinkedIn](https://www.linkedin.com/in/alexchao56/) · [YouTube](https://www.youtube.com/@alexchaomander) · [Substack](https://alexchao.substack.com/)
