@@ -6,6 +6,10 @@ A self-hosted web interface for managing and monitoring local CLI-based AI codin
 
 Start an agent on your laptop, walk away, and check in from your phone or tablet. CloudCode keeps the session alive, renders the output cleanly, and lets you stay in the loop wherever you are.
 
+<p align="center">
+<img width="390" height="746" alt="image" src="https://github.com/user-attachments/assets/39a69c17-44c0-42de-9ad7-13bd551bff1d" />
+</p>
+
 ---
 
 ## Why CloudCode?
