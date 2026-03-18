@@ -40,10 +40,14 @@
 }
 
 .xterm-container .xterm-viewport {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: hidden;
   overscroll-behavior: contain;
-  touch-action: pan-y;
+  touch-action: none; /* we handle scrolling via pointer events */
+}
+
+/* iOS safe area for bottom bars (home-bar devices) */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Terminal Cursor Glow */
