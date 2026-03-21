@@ -58,7 +58,9 @@ async function startTranscriptRecorder(sessionId: string, sessionName: string): 
 
   const recorder = await sidecarManager.openStream(sessionName, 160, 48, {
     onOutput: ({ text }) => {
-      void appendTranscript(sessionId, text).catch(() => {});
+      void appendTranscript(sessionId, text).catch((err) => {
+        console.error(`Failed to append transcript for session ${sessionId}:`, err)
+      })
     },
     onExit: () => {
       transcriptRecorders.delete(sessionId);
