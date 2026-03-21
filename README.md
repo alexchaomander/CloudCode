@@ -15,7 +15,8 @@ Start an agent on your laptop, walk away, and check in from your phone or tablet
 ## Why CloudCode?
 
 - **Agent agnostic:** Works with Claude Code, Gemini CLI, OpenAI Codex, GitHub Copilot CLI, or any CLI tool.
-- **Readable logs:** Intercepts raw terminal output and renders it as formatted Markdown — easier to read on mobile.
+- **Task launch:** Start tasks instantly from your mobile dashboard without opening a full terminal. CloudCode defaults to your recent projects and drops you into the live session view.
+- **Transcript logs:** Shows the full session output in a scrollable, timestamped transcript view.
 - **QR code pairing:** Scan a QR code from your terminal to authenticate your phone. No passwords or SSH keys.
 - **Persistent sessions:** Sessions run inside `tmux`. Your agent keeps working if your laptop sleeps or your connection drops. Reconnect and pick up where you left off.
 - **Flexible networking:** Works on local Wi-Fi, over Tailscale (private network), or via Cloudflare Tunnels (no port-forwarding needed).
@@ -114,6 +115,18 @@ cloudcode run claude-code --rc --tunnel
 cloudcode run custom --command "npx some-ai-tool" --rc
 ```
 
+### Send vs create
+
+Use the dashboard `Send` box when you want the fastest path:
+- It uses your recent agent and workspace defaults.
+- It creates a background session automatically.
+- It opens the live terminal first.
+
+Use `Create` when you want full control:
+- Pick the exact agent profile.
+- Choose the workspace or worktree deliberately.
+- Set a title and startup prompt before launch.
+
 ---
 
 ## Architecture
@@ -162,4 +175,3 @@ Built by Alex Chao (@alexchaomander). Find me on my socials!
 · [LinkedIn](https://www.linkedin.com/in/alexchao56/)
 · [YouTube](https://www.youtube.com/@alexchaomander)
 · [Substack](https://alexchao.substack.com/)
-

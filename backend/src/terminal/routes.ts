@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { getSession, getSessionByPublicId } from '../sessions/service.js';
+import { getSession, getSessionByPublicId, hasTranscriptRecorder } from '../sessions/service.js';
 import { validateSession } from '../auth/service.js';
 import { sidecarManager, type SidecarStreamHandle } from './sidecar-manager.js';
 import * as tmux from '../tmux/adapter.js';
@@ -9,10 +9,24 @@ import {
   formatReadableTerminalText,
   hasReadableTranscriptArtifacts,
   readTranscript,
+  readTranscriptPage,
 } from './transcript-store.js';
 
+async function resolveTerminalTarget(id: string) {
+  const session = getSession(id) ?? getSessionByPublicId(id);
+  if (session) {
+    return { session, tmuxSessionName: session.tmuxSessionName, isMirrorOnly: false };
+  }
+
+  if (await tmux.hasSession(id)) {
+    return { session: null, tmuxSessionName: id, isMirrorOnly: true };
+  }
+
+  return null;
+}
+
 const terminalRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/api/v1/sessions/:id/terminal/bootstrap', async (request, reply) => {
+  fastify.get('/api/v1/sessions/:id/transcript', async (request, reply) => {
     const cookieToken = request.cookies?.['session'];
     const queryToken = (request.query as Record<string, string>)['token'];
     const token = cookieToken ?? queryToken;
@@ -27,35 +41,87 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
     }
 
-    const isTerminalAvailable = session.status === 'running' || session.status === 'stopped' || session.status === 'error';
+    const query = request.query as Record<string, string | undefined>;
+    const parseNumber = (value?: string): number | undefined => {
+      if (value === undefined || value === '') return undefined;
+      const parsed = Number.parseInt(value, 10);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+
+    const page = await readTranscriptPage(session.id, {
+      limit: parseNumber(query.limit),
+      before: parseNumber(query.before),
+      after: parseNumber(query.after),
+    });
+
+    return reply.send(page);
+  });
+
+  fastify.get('/api/v1/sessions/:id/terminal/bootstrap', async (request, reply) => {
+    const cookieToken = request.cookies?.['session'];
+    const queryToken = (request.query as Record<string, string>)['token'];
+    const token = cookieToken ?? queryToken;
+
+    if (!token || !validateSession(token)) {
+      return reply.status(401).send({ error: 'Unauthorized', message: 'Authentication required' });
+    }
+
+    const { id } = request.params as { id: string };
+    const target = await resolveTerminalTarget(id);
+    if (!target) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Session not found' });
+    }
+
+    const { session, tmuxSessionName, isMirrorOnly } = target;
+    const isTerminalAvailable = isMirrorOnly
+      ? true
+      : session !== null && (session.status === 'running' || session.status === 'stopped' || session.status === 'error');
+    const sessionId = session?.id ?? null;
     const [dimensions, historyOutput, currentOutput] = await Promise.all([
       isTerminalAvailable
-        ? tmux.getPaneDimensions(session.tmuxSessionName)
+        ? tmux.getPaneDimensions(tmuxSessionName)
         : Promise.resolve({ cols: 160, rows: 48 }),
       isTerminalAvailable
-        ? tmux.capturePaneHistory(session.tmuxSessionName)
+        ? tmux.capturePaneHistory(tmuxSessionName)
         : Promise.resolve(''),
       isTerminalAvailable
-        ? tmux.capturePane(session.tmuxSessionName)
+        ? tmux.capturePane(tmuxSessionName)
         : Promise.resolve(''),
     ]);
     try {
-      const transcriptOutput = await readTranscript(session.id, { ...dimensions, asMarkdown: true });
       const paneOutput = [historyOutput, currentOutput].filter(Boolean).join('\n').trim();
+      const scrollbackOutput = isMirrorOnly
+        ? paneOutput
+        : sessionId
+          ? (await readTranscript(sessionId, dimensions)) || paneOutput
+          : paneOutput;
+      const timelineOutput = isMirrorOnly
+        ? scrollbackOutput
+        : sessionId
+          ? (await readTranscript(sessionId, { ...dimensions, asTimeline: true })) || scrollbackOutput
+          : scrollbackOutput;
+      const transcriptOutput = isMirrorOnly
+        ? formatReadableTerminalText(paneOutput)
+        : sessionId
+          ? await readTranscript(sessionId, { ...dimensions, asMarkdown: true })
+          : formatReadableTerminalText(paneOutput);
       const readablePaneOutput = formatReadableTerminalText(paneOutput);
       
       // We prioritize the semantic markdown transcript output if it exists and has content
       const readableOutput = transcriptOutput 
         ? transcriptOutput 
-        : (readablePaneOutput || await readTranscript(session.id, dimensions));
+        : (readablePaneOutput || (sessionId ? await readTranscript(sessionId, dimensions) : ''));
 
       return reply.send({
+        scrollbackOutput,
+        timelineOutput,
         readableOutput,
         transcriptOutput,
         readablePaneOutput,
         historyOutput,
         currentOutput,
-        fullOutput: readableOutput || (paneOutput || currentOutput),
+        transcriptPaginationSupported: true,
+        fullOutput: scrollbackOutput || readableOutput || paneOutput || currentOutput,
       });
     } catch (e: any) {
       request.log.error({ err: e }, "Error in bootstrap");
@@ -98,8 +164,8 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const attachSession = async (requestedSessionId: string): Promise<void> => {
-      const session = getSession(requestedSessionId) ?? getSessionByPublicId(requestedSessionId);
-      if (!session) {
+      const target = await resolveTerminalTarget(requestedSessionId);
+      if (!target) {
         ws.send(JSON.stringify({
           type: 'session.error',
           message: `Session not found: ${requestedSessionId}`,
@@ -107,11 +173,16 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
         return;
       }
 
+      const { session, tmuxSessionName, isMirrorOnly } = target;
       await ptySession?.close().catch(() => {});
       attachedSession = session;
-      ptySession = await sidecarManager.openStream(session.tmuxSessionName, lastSize.cols, lastSize.rows, {
+      ptySession = await sidecarManager.openStream(tmuxSessionName, lastSize.cols, lastSize.rows, {
         onOutput: ({ text, dataBase64 }) => {
-          void appendTranscript(session.id, text).catch(() => {});
+          if (session && !isMirrorOnly && !hasTranscriptRecorder(session.id)) {
+            void appendTranscript(session.id, text).catch((err) => {
+              console.error(`[terminal] Failed to append transcript for session ${session.id}:`, err)
+            })
+          }
           if (ws.readyState !== 1) return;
           ws.send(JSON.stringify({ type: 'terminal.output', dataBase64 }));
         },
@@ -127,9 +198,11 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
 
       ws.send(JSON.stringify({
         type: 'session.status',
-        status: session.status,
+        status: session?.status ?? 'running',
       }));
-      void appendTranscriptResize(session.id, lastSize.cols, lastSize.rows).catch(() => {});
+      if (session && !isMirrorOnly) {
+        void appendTranscriptResize(session.id, lastSize.cols, lastSize.rows).catch(() => {});
+      }
     };
 
     const attachAndTrack = (requestedSessionId: string): Promise<void> => {

@@ -6,12 +6,13 @@ import { execFileSync } from 'node:child_process';
 import { db } from '../db/index.js';
 import { logAudit } from '../audit/service.js';
 import * as tmux from '../tmux/adapter.js';
-import { deleteTranscript, initTranscript } from '../terminal/transcript-store.js';
+import { sidecarManager, type SidecarStreamHandle } from '../terminal/sidecar-manager.js';
+import { appendTranscript, deleteTranscript, initTranscript } from '../terminal/transcript-store.js';
 import { validateWorkdir } from '../utils/paths.js';
 import type { AgentProfile, Session } from '../db/schema.js';
+import { hasPromptMarker } from './startup-ready.js';
 
 const INITIAL_STARTUP_INPUT_DELAY_MS = parseInt(process.env.INITIAL_STARTUP_INPUT_DELAY_MS ?? '1600', 10);
-const FOLLOWUP_STARTUP_INPUT_DELAY_MS = parseInt(process.env.FOLLOWUP_STARTUP_INPUT_DELAY_MS ?? '700', 10);
 const STARTUP_READY_TIMEOUT_MS = parseInt(process.env.STARTUP_READY_TIMEOUT_MS ?? '12000', 10);
 const STARTUP_READY_POLL_MS = parseInt(process.env.STARTUP_READY_POLL_MS ?? '250', 10);
 
@@ -46,68 +47,64 @@ async function sendStartupLine(sessionName: string, text: string): Promise<void>
   await tmux.sendEnter(sessionName);
 }
 
-function getStartupReadyPatterns(profile: AgentProfile): string[] {
-  const slug = profile.slug.toLowerCase();
+const transcriptRecorders = new Map<string, SidecarStreamHandle>();
 
-  if (slug === 'gemini-cli') {
-    return [
-      'type your message or @path/to/file',
-      '? for shortcuts',
-      '/model auto',
-    ];
-  }
-
-  if (slug === 'claude-code') {
-    return [
-      '? for shortcuts',
-      'try "',
-      'shift+tab to accept edits',
-    ];
-  }
-
-  if (slug === 'openai-codex') {
-    return [
-      '? for shortcuts',
-      'type your message',
-      'shift+tab to accept edits',
-    ];
-  }
-
-  if (slug === 'github-copilot-cli') {
-    return [
-      'type your message',
-      '? for shortcuts',
-    ];
-  }
-
-  return ['type your message', '? for shortcuts', '> '];
+export function hasTranscriptRecorder(sessionId: string): boolean {
+  return transcriptRecorders.has(sessionId);
 }
 
-function hasPromptMarker(content: string, patterns: string[]): boolean {
-  const normalized = content.toLowerCase();
-  if (patterns.some((pattern) => normalized.includes(pattern.toLowerCase()))) {
-    return true;
-  }
+async function startTranscriptRecorder(sessionId: string, sessionName: string): Promise<void> {
+  if (transcriptRecorders.has(sessionId)) return;
 
-  const lines = normalized
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const recorder = await sidecarManager.openStream(sessionName, 160, 48, {
+    onOutput: ({ text }) => {
+      void appendTranscript(sessionId, text).catch((err) => {
+        console.error(`Failed to append transcript for session ${sessionId}:`, err)
+      })
+    },
+    onExit: () => {
+      transcriptRecorders.delete(sessionId);
+    },
+    onError: () => {
+      transcriptRecorders.delete(sessionId);
+    },
+  });
 
-  const lastLine = lines.at(-1) ?? '';
-  return ['>', '❯', '$', '#'].includes(lastLine);
+  transcriptRecorders.set(sessionId, recorder);
 }
 
-async function waitForStartupReady(sessionName: string, profile: AgentProfile): Promise<void> {
+async function stopTranscriptRecorder(sessionId: string): Promise<void> {
+  const recorder = transcriptRecorders.get(sessionId);
+  if (!recorder) return;
+  transcriptRecorders.delete(sessionId);
+  await recorder.close().catch(() => {});
+}
+
+async function backfillTranscriptSnapshot(sessionId: string, sessionName: string): Promise<void> {
+  if (typeof tmux.capturePaneHistory !== 'function' || typeof tmux.capturePane !== 'function') {
+    return;
+  }
+
+  const [historyOutput, currentOutput] = await Promise.all([
+    tmux.capturePaneHistory(sessionName),
+    tmux.capturePane(sessionName),
+  ]);
+
+  const snapshot = [historyOutput, currentOutput].filter(Boolean).join('\n').trim();
+  if (!snapshot) return;
+
+  await appendTranscript(sessionId, snapshot);
+}
+
+async function waitForStartupReady(sessionName: string, _profile: AgentProfile): Promise<void> {
   const deadline = Date.now() + STARTUP_READY_TIMEOUT_MS;
-  const patterns = getStartupReadyPatterns(profile);
   let sawOutput = false;
 
   while (Date.now() < deadline) {
     const content = await tmux.capturePane(sessionName);
     if (content.trim()) {
       sawOutput = true;
-      if (hasPromptMarker(content, patterns)) {
+      if (hasPromptMarker(content)) {
         return;
       }
     }
@@ -353,17 +350,23 @@ export async function createSession(params: CreateSessionParams): Promise<Sessio
       Object.keys(env).length > 0 ? env : undefined
     );
 
+    if (typeof tmux.setHistoryLimit === 'function') {
+      await tmux.setHistoryLimit(tmuxSessionName, 100000).catch(() => {});
+    }
+
+    await backfillTranscriptSnapshot(id, tmuxSessionName);
+    await startTranscriptRecorder(id, tmuxSessionName).catch((err) => {
+      // Transcript recording is best-effort; session creation should still succeed.
+      console.warn('Failed to start transcript recorder', err);
+    });
+
     if (profile.startup_template) {
       await waitForStartupReady(tmuxSessionName, profile);
       await sendStartupLine(tmuxSessionName, profile.startup_template);
     }
 
     if (startupPrompt) {
-      if (profile.startup_template) {
-        await sleep(FOLLOWUP_STARTUP_INPUT_DELAY_MS);
-      } else {
-        await waitForStartupReady(tmuxSessionName, profile);
-      }
+      await waitForStartupReady(tmuxSessionName, profile);
       await sendStartupLine(tmuxSessionName, startupPrompt);
     }
 
@@ -423,6 +426,7 @@ export async function killSession(id: string, userId: string): Promise<void> {
   if (!exited) {
     throw new Error(`Failed to terminate tmux session: ${session.tmux_session_name}`);
   }
+  await stopTranscriptRecorder(session.id);
 
   const now = new Date().toISOString();
   db.prepare(`UPDATE sessions SET status = 'stopped', stopped_at = ?, updated_at = ? WHERE id = ?`).run(now, now, id);
@@ -438,6 +442,8 @@ export async function killSession(id: string, userId: string): Promise<void> {
 export async function deleteSession(id: string, userId: string): Promise<void> {
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as (Session & { worktree_path: string | null }) | undefined;
   if (!session) throw new Error(`Session not found: ${id}`);
+
+  await stopTranscriptRecorder(session.id);
 
   const exists = await tmux.hasSession(session.tmux_session_name);
   if (exists) {

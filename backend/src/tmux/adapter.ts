@@ -52,6 +52,14 @@ export async function createSession(
   await run(tmuxArgs);
 }
 
+export async function setHistoryLimit(sessionName: string, limit: number): Promise<void> {
+  try {
+    await run(['set-window-option', '-t', `${sessionName}:0`, 'history-limit', limit.toString()]);
+  } catch {
+    // Best-effort scrollback tuning.
+  }
+}
+
 export interface TmuxSessionInfo {
   name: string;
   windows: number;
@@ -113,11 +121,6 @@ export async function capturePane(sessionName: string): Promise<string> {
 
 export async function capturePaneHistory(sessionName: string): Promise<string> {
   try {
-    const state = await getPaneState(sessionName);
-    if (state.alternateOn) {
-      return '';
-    }
-
     const [history, dimensions] = await Promise.all([
       run(['capture-pane', '-t', sessionName, '-p', '-e', '-N', '-S', '-']),
       getPaneDimensions(sessionName),

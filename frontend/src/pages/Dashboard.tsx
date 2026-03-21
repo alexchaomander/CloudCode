@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Session, AgentProfile } from '../types'
 import { SessionCard } from '../components/SessionCard'
+import { DispatchTask } from '../components/DispatchTask'
 import { apiFetch } from '../hooks/useApi'
 
 interface RecentCombination {
@@ -11,14 +12,22 @@ interface RecentCombination {
   agentName: string
 }
 
+interface RecentData {
+  recent: RecentCombination[]
+  agents: Array<{ id: string; name: string }>
+  paths: string[]
+}
+
 export function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [profiles, setProfiles] = useState<AgentProfile[]>([])
   const [recent, setRecent] = useState<RecentCombination[]>([])
+  const [recentAgents, setRecentAgents] = useState<Array<{ id: string; name: string }>>([])
+  const [recentPaths, setRecentPaths] = useState<string[]>([])
   const [hasRepos, setHasRepos] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'running' | 'archived'>('all')
+  const [filter, setFilter] = useState<'all' | 'archived'>('all')
   const [isLaunchingRecent, setIsLaunchingRecent] = useState<string | null>(null)
   const navigate = useNavigate()
 
@@ -27,12 +36,14 @@ export function Dashboard() {
       const [sessionsData, profilesData, recentData, reposData] = await Promise.all([
         apiFetch<{ sessions: Session[] }>('/api/v1/sessions'),
         apiFetch<{ profiles: AgentProfile[] }>('/api/v1/profiles'),
-        apiFetch<{ recent: RecentCombination[] }>('/api/v1/sessions/recent'),
+        apiFetch<RecentData>('/api/v1/sessions/recent'),
         apiFetch<{ repos: any[] }>('/api/v1/repos')
       ])
       setSessions(sessionsData.sessions)
       setProfiles(profilesData.profiles)
       setRecent(recentData.recent)
+      setRecentAgents(recentData.agents)
+      setRecentPaths(recentData.paths)
       setHasRepos(reposData.repos.length > 0)
       setError(null)
     } catch (err) {
@@ -68,29 +79,12 @@ export function Dashboard() {
     }
   }
 
-  const filteredSessions = sessions.filter(s => {
-    if (filter === 'archived') return s.archived
-    if (filter === 'running') return s.status === 'running' || s.status === 'starting'
-    return !s.archived
-  })
-
-  const groupedSessions = useMemo(() => {
-    const groups: Record<string, Session[]> = {}
-    filteredSessions.forEach(s => {
-      const projectName = s.workdir?.split('/').pop() || 'Uncategorized'
-      if (!groups[projectName]) groups[projectName] = []
-      groups[projectName].push(s)
-    })
-    return groups
-  }, [filteredSessions])
-
-  const tabs: Array<{ id: typeof filter; label: string }> = [
-    { id: 'all', label: 'Active' },
-    { id: 'running', label: 'Running' },
-    { id: 'archived', label: 'Archived' },
-  ]
-
   const runningSessions = sessions.filter(s => s.status === 'running' || s.status === 'starting')
+  const archivedSessions = sessions.filter(s => s.archived)
+  const visibleSessionList = filter === 'all'
+    ? sessions.filter(s => !s.archived && !(s.status === 'running' || s.status === 'starting'))
+    : archivedSessions
+  const showActiveSection = runningSessions.length > 0
 
   // Onboarding Checklist logic
   const onboardingSteps = [
@@ -100,6 +94,10 @@ export function Dashboard() {
     { id: 'session', label: 'First Session Launched', done: sessions.length > 0 },
   ]
   const isFullyOnboarded = onboardingSteps.every(s => s.done)
+
+  const mostRecent = recent[0]
+  const mostRecentProfileId = recentAgents[0]?.id ?? mostRecent?.agentProfileId
+  const mostRecentWorkdir = recentPaths[0] ?? mostRecent?.workdir
 
   if (loading && sessions.length === 0) {
     return (
@@ -134,9 +132,49 @@ export function Dashboard() {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
-          <span className="text-sm">New</span>
+          <span className="text-sm">Create</span>
         </button>
       </div>
+
+      {/* Active Sessions */}
+      {showActiveSection && (
+        <div className="animate-slide-up">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em]">
+              Live Sessions
+            </h2>
+          </div>
+          <div className="grid gap-4">
+            {runningSessions.map(session => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                onRefresh={fetchSessions}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dispatch Section */}
+      {isFullyOnboarded && filter !== 'archived' && (
+        <div className="space-y-3 animate-slide-up">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em]">
+              Send task
+            </h2>
+            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
+              Terminal
+            </span>
+          </div>
+          <DispatchTask 
+            profiles={profiles} 
+            recentWorkdir={mostRecentWorkdir}
+            recentProfileId={mostRecentProfileId}
+            recentWorkdirs={recentPaths}
+          />
+        </div>
+      )}
 
       {/* Onboarding Checklist (Only for new users) */}
       {!isFullyOnboarded && sessions.length === 0 && (
@@ -182,8 +220,8 @@ export function Dashboard() {
       {/* Smart Recents / Quick Start */}
       {recent.length > 0 && filter === 'all' && (
         <div className="space-y-3 animate-fade-in">
-          <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Quick Start</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Recent</h3>
+          <div className="flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
             {recent.map((r, i) => {
               const key = `${r.agentProfileId}:${r.workdir}`
               const isLaunching = isLaunchingRecent === key
@@ -192,7 +230,7 @@ export function Dashboard() {
                   key={i}
                   disabled={!!isLaunchingRecent}
                   onClick={() => handleLaunchRecent(r)}
-                  className="flex flex-col text-left p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all tap-feedback group"
+                  className="flex min-w-[72vw] sm:min-w-0 flex-col text-left p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all tap-feedback group"
                 >
                   <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1 truncate">
                     {r.agentName}
@@ -221,7 +259,10 @@ export function Dashboard() {
 
       {/* Filter tabs */}
       <div className="flex bg-zinc-900/50 p-1 rounded-xl border border-zinc-800/50 backdrop-blur-sm">
-        {tabs.map(tab => (
+        {([
+          { id: 'all', label: 'All Sessions' },
+          { id: 'archived', label: 'Archived' },
+        ] as const).map(tab => (
           <button
             key={tab.id}
             onClick={() => setFilter(tab.id)}
@@ -250,37 +291,44 @@ export function Dashboard() {
               Try Reconnecting
             </button>
           </div>
-        ) : filteredSessions.length === 0 ? (
+        ) : visibleSessionList.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
             <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center text-4xl mb-6 border border-zinc-800 shadow-inner">
-              {filter === 'running' ? '💤' : filter === 'archived' ? '📦' : '🚀'}
+              {filter === 'archived' ? '📦' : '🚀'}
             </div>
             <h3 className="text-zinc-200 font-bold text-lg mb-1">
-              {filter === 'running'
-                ? 'Quiet Day'
-                : filter === 'archived'
+              {filter === 'archived'
                 ? 'Archive Empty'
+                : runningSessions.length > 0
+                ? 'No Other Sessions Yet'
                 : 'No Sessions Yet'}
             </h3>
-            <p className="text-zinc-500 text-sm max-w-[200px] mb-8">
-              {filter === 'running'
-                ? 'No active coding agents are running right now.'
-                : filter === 'archived'
+            <p className="text-zinc-500 text-sm max-w-[240px] mb-8">
+              {filter === 'archived'
                 ? 'Your archived sessions will appear here.'
-                : 'Start a new session to begin orchestrating your agents.'}
+                : runningSessions.length > 0
+                ? 'Live sessions stay pinned above this list.'
+                : 'Launch a task to begin managing sessions here.'}
             </p>
-            {filter === 'all' && (
+            {filter === 'all' ? (
               <button
                 onClick={() => navigate('/sessions/new')}
                 className="px-8 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-xl border border-zinc-700 transition-all tap-feedback"
               >
-                Create First Session
+                Create
               </button>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="space-y-10 animate-slide-up">
-            {Object.entries(groupedSessions).map(([projectName, groupSessions]) => (
+            {Object.entries(
+              visibleSessionList.reduce<Record<string, Session[]>>((groups, session) => {
+                const projectName = session.workdir?.split('/').pop() || 'Uncategorized'
+                if (!groups[projectName]) groups[projectName] = []
+                groups[projectName].push(session)
+                return groups
+              }, {})
+            ).map(([projectName, groupSessions]) => (
               <div key={projectName} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
                   <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] whitespace-nowrap">
@@ -303,13 +351,6 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Pull to refresh hint */}
-      {!loading && filteredSessions.length > 0 && (
-        <div className="flex items-center justify-center gap-2 py-4">
-          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500/50 animate-pulse" />
-          <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.2em]">Live Sync Active</span>
-        </div>
-      )}
     </div>
   )
 }
