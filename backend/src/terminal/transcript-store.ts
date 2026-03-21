@@ -243,10 +243,12 @@ function buildTranscriptPageFromEvents(
   }
 
   let selected = outputEvents;
-  if (typeof options?.after === 'number' && Number.isFinite(options.after)) {
-    selected = outputEvents.filter(({ index }) => index > options.after).slice(0, limit);
-  } else if (typeof options?.before === 'number' && Number.isFinite(options.before)) {
-    const older = outputEvents.filter(({ index }) => index < options.before);
+  const after = options?.after;
+  const before = options?.before;
+  if (typeof after === 'number' && Number.isFinite(after)) {
+    selected = outputEvents.filter(({ index }) => index > after).slice(0, limit);
+  } else if (typeof before === 'number' && Number.isFinite(before)) {
+    const older = outputEvents.filter(({ index }) => index < before);
     selected = older.slice(Math.max(0, older.length - limit));
   } else if (outputEvents.length > limit) {
     selected = outputEvents.slice(outputEvents.length - limit);

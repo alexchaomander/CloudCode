@@ -75,7 +75,8 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     const { session, tmuxSessionName, isMirrorOnly } = target;
     const isTerminalAvailable = isMirrorOnly
       ? true
-      : session.status === 'running' || session.status === 'stopped' || session.status === 'error';
+      : session !== null && (session.status === 'running' || session.status === 'stopped' || session.status === 'error');
+    const sessionId = session?.id ?? null;
     const [dimensions, historyOutput, currentOutput] = await Promise.all([
       isTerminalAvailable
         ? tmux.getPaneDimensions(tmuxSessionName)
@@ -91,19 +92,25 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
       const paneOutput = [historyOutput, currentOutput].filter(Boolean).join('\n').trim();
       const scrollbackOutput = isMirrorOnly
         ? paneOutput
-        : (await readTranscript(session.id, dimensions)) || paneOutput;
+        : sessionId
+          ? (await readTranscript(sessionId, dimensions)) || paneOutput
+          : paneOutput;
       const timelineOutput = isMirrorOnly
         ? scrollbackOutput
-        : (await readTranscript(session.id, { ...dimensions, asTimeline: true })) || scrollbackOutput;
+        : sessionId
+          ? (await readTranscript(sessionId, { ...dimensions, asTimeline: true })) || scrollbackOutput
+          : scrollbackOutput;
       const transcriptOutput = isMirrorOnly
         ? formatReadableTerminalText(paneOutput)
-        : await readTranscript(session.id, { ...dimensions, asMarkdown: true });
+        : sessionId
+          ? await readTranscript(sessionId, { ...dimensions, asMarkdown: true })
+          : formatReadableTerminalText(paneOutput);
       const readablePaneOutput = formatReadableTerminalText(paneOutput);
       
       // We prioritize the semantic markdown transcript output if it exists and has content
       const readableOutput = transcriptOutput 
         ? transcriptOutput 
-        : (readablePaneOutput || (session ? await readTranscript(session.id, dimensions) : ''));
+        : (readablePaneOutput || (sessionId ? await readTranscript(sessionId, dimensions) : ''));
 
       return reply.send({
         scrollbackOutput,
