@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { AgentProfile, RepoRoot, DiscoveredProject } from '../types'
+import { AgentProfile, RepoRoot, DiscoveredProject, Session } from '../types'
 import { apiFetch } from '../hooks/useApi'
 
 interface RecentData {
@@ -9,12 +9,16 @@ interface RecentData {
   paths: string[]
 }
 
+interface SessionListResponse {
+  sessions: Session[]
+}
+
 export function NewSession() {
   const navigate = useNavigate()
   const location = useLocation()
   
-  const [activeTab, setActiveTab] = useState<'standard' | 'mirror'>('standard')
-  const [mirrorSessions, setMirrorSessions] = useState<Array<{ name: string; created: string }>>([])
+  const [activeTab, setActiveTab] = useState<'standard' | 'live'>('standard')
+  const [mirrorSessions, setMirrorSessions] = useState<Session[]>([])
   
   // Parse URL parameters
   const queryParams = new URLSearchParams(location.search)
@@ -47,15 +51,15 @@ export function NewSession() {
       apiFetch<{ repos: RepoRoot[] }>('/api/v1/repos'),
       apiFetch<{ projects: DiscoveredProject[] }>('/api/v1/repos/discover'),
       apiFetch<RecentData>('/api/v1/sessions/recent'),
-      apiFetch<Array<{ name: string; created: string }>>('/api/v1/terminal/tmux-sessions'),
+      apiFetch<SessionListResponse>('/api/v1/sessions'),
     ])
-      .then(([profilesRes, reposRes, projectsRes, recentRes, mirrorRes]) => {
+      .then(([profilesRes, reposRes, projectsRes, recentRes, sessionsRes]) => {
         setProfiles(profilesRes.profiles)
         setRepos(reposRes.repos)
         setProjects(projectsRes.projects)
         setRecentAgents(recentRes.agents)
         setRecentPaths(recentRes.paths)
-        setMirrorSessions(mirrorRes)
+        setMirrorSessions(sessionsRes.sessions.filter((session) => session.status === 'running' || session.status === 'starting'))
         
         // Auto-select root path if passed via URL
         if (initialRootId) {
@@ -134,7 +138,16 @@ export function NewSession() {
         }),
       })
 
-      navigate(`/sessions/${res.session.publicId}`)
+      navigate(`/sessions/${res.session.publicId}`, {
+        state: {
+          activeTab: 'terminal',
+          launch: {
+            title: title || 'Create session',
+            agentName: profiles.find(p => p.id === agentProfileId)?.name ?? 'agent',
+            workdir: workdir || undefined,
+          },
+        },
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create session')
     } finally {
@@ -144,9 +157,30 @@ export function NewSession() {
 
   if (loadingData) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        <span className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Preparing Workspace...</span>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-[28px] border border-white/10 bg-zinc-950/80 px-6 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-cyan-300/80">Preparing</p>
+              <h3 className="mt-2 text-lg font-semibold tracking-tight text-white">Loading launch options</h3>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                Fetching agents, workspaces, and live sessions so the launch screen is ready.
+              </p>
+            </div>
+            <div className="relative mt-1 h-11 w-11 flex-shrink-0 rounded-2xl border border-cyan-400/20 bg-cyan-400/10">
+              <div className="absolute inset-[6px] rounded-xl border border-cyan-300/20" />
+              <div className="absolute inset-0 animate-spin rounded-2xl border-2 border-cyan-300/15 border-t-cyan-300/90" />
+            </div>
+          </div>
+          <div className="mt-5 overflow-hidden rounded-full border border-white/10 bg-white/5">
+            <div className="h-1.5 w-2/5 animate-[pulse_1.6s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-300 via-white to-cyan-300" />
+          </div>
+          <div className="mt-4 flex items-center justify-between text-[11px] text-zinc-500">
+            <span>Agents</span>
+            <span>Workspaces</span>
+            <span>Sessions</span>
+          </div>
+        </div>
       </div>
     )
   }
@@ -155,8 +189,8 @@ export function NewSession() {
     <div className="px-4 py-6 space-y-8 animate-fade-in pb-20">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">New Session</h1>
-          <p className="text-zinc-500 text-sm font-medium">Configure your workspace</p>
+          <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Create</h1>
+          <p className="text-zinc-500 text-sm font-medium">Full control before launch</p>
         </div>
         
         <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
@@ -165,50 +199,62 @@ export function NewSession() {
             onClick={() => setActiveTab('standard')}
             className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'standard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
-            Agent
+            Create
           </button>
           <button 
             type="button"
-            onClick={() => setActiveTab('mirror')}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'mirror' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
+            onClick={() => setActiveTab('live')}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'live' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
-            Mirror
+            Live Sessions
           </button>
         </div>
       </div>
 
-      {activeTab === 'mirror' ? (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-500/20 rounded-full flex items-center justify-center text-xl">📡</div>
-              <div>
-                <h3 className="text-indigo-400 font-bold">Mirror Mode</h3>
-                <p className="text-indigo-400/70 text-xs leading-relaxed">
-                  Attach to an existing tmux session on your machine to control it remotely.
-                </p>
-              </div>
-            </div>
+      {activeTab === 'standard' && (
+        <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-5 space-y-2 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Control</span>
           </div>
+          <p className="text-sm text-zinc-100 font-medium">Choose agent, workspace, title.</p>
+          <p className="text-[11px] text-zinc-500 leading-relaxed">Use Send for the fast path.</p>
+        </div>
+      )}
+
+      {activeTab === 'live' ? (
+        <div className="space-y-6 animate-fade-in">
+              <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-500/20 rounded-full flex items-center justify-center text-xl">📡</div>
+                  <div>
+                    <h3 className="text-indigo-400 font-bold">Live Sessions</h3>
+                    <p className="text-indigo-400/70 text-xs leading-relaxed">
+                      Open a running CloudCode session.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
           <div className="grid gap-3">
             {mirrorSessions.length === 0 ? (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center space-y-3">
                 <div className="text-4xl opacity-20">📭</div>
-                <p className="text-zinc-500 text-sm font-medium italic">No active tmux sessions found.</p>
-                <p className="text-zinc-600 text-[10px] uppercase tracking-widest">Start a session in your local terminal first</p>
+                <p className="text-zinc-500 text-sm font-medium italic">No live sessions found.</p>
+                <p className="text-zinc-600 text-[10px] uppercase tracking-widest">Launch a session first</p>
               </div>
             ) : (
               mirrorSessions.map(s => (
                 <button
-                  key={s.name}
+                  key={s.publicId}
                   type="button"
-                  onClick={() => navigate(`/sessions/mirror/${s.name}`)}
+                  onClick={() => navigate(`/sessions/${s.publicId}`)}
                   className="w-full bg-zinc-900 border border-zinc-800 hover:border-indigo-500/50 p-5 rounded-2xl text-left flex items-center justify-between group transition-all tap-feedback"
                 >
                   <div className="space-y-1">
-                    <h4 className="text-zinc-100 font-bold group-hover:text-indigo-400 transition-colors">{s.name}</h4>
-                    <p className="text-zinc-500 text-[10px] font-mono">Created: {new Date(parseInt(s.created) * 1000).toLocaleString()}</p>
+                    <h4 className="text-zinc-100 font-bold group-hover:text-indigo-400 transition-colors">{s.title}</h4>
+                    <p className="text-zinc-500 text-[10px] font-mono">
+                      {s.agentProfile?.name ?? s.agentProfileId} · {s.tmuxSessionName}
+                    </p>
                   </div>
                   <div className="w-8 h-8 bg-zinc-950 rounded-lg flex items-center justify-center text-zinc-600 group-hover:text-indigo-400 transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -247,7 +293,7 @@ export function NewSession() {
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-5 h-5 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] font-bold text-zinc-400 border border-zinc-700">1</div>
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Session Identity</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Session Details</h3>
           </div>
           
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl">
@@ -306,7 +352,7 @@ export function NewSession() {
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-5 h-5 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] font-bold text-zinc-400 border border-zinc-700">2</div>
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Working Directory</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Workspace</h3>
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl relative">
@@ -333,18 +379,18 @@ export function NewSession() {
                     <div className="fixed inset-0 z-40" onClick={() => setIsSearchFocused(false)} />
                     <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-80 overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-1 animate-slide-up scrollbar-none ring-1 ring-black/50">
                       {filteredProjects.length === 0 && projectSearch && (
-                        <div className="p-6 text-center text-zinc-500 text-xs italic">No matching projects found</div>
+                        <div className="p-6 text-center text-zinc-500 text-xs italic">No matches</div>
                       )}
                       
                       {projects.length === 0 && !projectSearch && (
                         <div className="p-6 text-center text-zinc-500 space-y-3">
-                          <p className="text-xs italic leading-relaxed">No folders have been discovered yet.</p>
+                          <p className="text-xs italic leading-relaxed">No workspaces yet.</p>
                           <button 
                             type="button"
                             onClick={() => navigate('/repositories')}
                             className="text-[10px] font-black text-indigo-500 uppercase tracking-widest border border-indigo-500/30 px-3 py-1.5 rounded-lg hover:bg-indigo-500/10 transition-colors"
                           >
-                            Configure Roots
+                            Add Root
                           </button>
                         </div>
                       )}
@@ -352,7 +398,7 @@ export function NewSession() {
                       {filteredProjects.length > 0 && (
                         <>
                           <div className="px-3 py-2 text-[9px] font-black text-zinc-600 uppercase tracking-widest">
-                            {projectSearch ? 'Search Results' : 'Suggested Workspaces'}
+                            {projectSearch ? 'Results' : 'Suggested'}
                           </div>
                           {filteredProjects.map(p => (
                             <button
@@ -383,7 +429,7 @@ export function NewSession() {
 
                       {recentPaths.length > 0 && !projectSearch && (
                         <>
-                          <div className="px-3 py-2 text-[9px] font-black text-zinc-600 uppercase tracking-widest border-t border-zinc-800 mt-1">Recently Used Paths</div>
+                          <div className="px-3 py-2 text-[9px] font-black text-zinc-600 uppercase tracking-widest border-t border-zinc-800 mt-1">Recent Paths</div>
                           {recentPaths.map((path, idx) => (
                             <button
                               key={idx}
@@ -406,7 +452,7 @@ export function NewSession() {
                         className="w-full text-left p-3 hover:bg-zinc-800 rounded-xl transition-colors group flex items-center gap-3 border-t border-zinc-800 mt-1"
                       >
                         <div className="w-6 h-6 bg-zinc-800 rounded-lg flex items-center justify-center text-xs">⌨️</div>
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Enter Manual Path</span>
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Manual Path</span>
                       </button>
                     </div>
                   </>
@@ -418,7 +464,7 @@ export function NewSession() {
               <div className="bg-indigo-600/10 border border-indigo-500/30 rounded-2xl p-4 flex items-center justify-between animate-fade-in shadow-inner">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Selected Workspace</span>
+                    <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Selected</span>
                     <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
                   </div>
                   <p className="text-base font-bold text-zinc-100 truncate tracking-tight">{workdir.split('/').pop()}</p>
@@ -436,7 +482,7 @@ export function NewSession() {
               <div className="animate-slide-up space-y-4 pt-2">
                 <div className="h-px bg-zinc-800 w-1/3 mx-auto" />
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 ml-1">Exact System Path</label>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5 ml-1">Path</label>
                   <input
                     type="text"
                     value={workdir}
@@ -445,7 +491,7 @@ export function NewSession() {
                     className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 focus:outline-none focus:border-indigo-500/50 transition-all font-mono text-sm"
                   />
                   <p className="mt-2 ml-1 text-[10px] text-zinc-600 italic leading-relaxed">
-                    CloudCode securely expands paths starting with <code className="text-zinc-300">~</code> to your home directory.
+                    `~` expands to your home directory.
                   </p>
                 </div>
               </div>
@@ -457,14 +503,14 @@ export function NewSession() {
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-5 h-5 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] font-bold text-zinc-400 border border-zinc-700">3</div>
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Initial Context</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Prompt</h3>
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-xl">
             <textarea
               value={startupPrompt}
               onChange={e => setStartupPrompt(e.target.value)}
-              placeholder="Instructions to send automatically when the session starts..."
+              placeholder="What should it do?"
               rows={4}
               className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 transition-all resize-none text-sm leading-relaxed"
             />
@@ -484,7 +530,7 @@ export function NewSession() {
             onClick={() => navigate('/')}
             className="flex-1 py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-2xl text-xs uppercase tracking-widest transition-all tap-feedback border border-zinc-700/50"
           >
-            Cancel
+            Back
           </button>
           <button
             type="submit"
@@ -498,7 +544,7 @@ export function NewSession() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span>Launch Session</span>
+                <span>Launch</span>
               </>
             )}
           </button>

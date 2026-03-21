@@ -11,6 +11,12 @@ This is the equivalent of `claude --rc`. It starts the specified agent in a loca
 ### 2. Server Mode (`cloudcode start --rc`)
 This is the equivalent of `claude remote-control`. It starts the CloudCode background server and displays a pairing QR code. It doesn't start a specific agent locally but makes your entire environment available for remote management.
 - **Best for:** Leaving your laptop at home/office and accessing it throughout the day.
+- **Bonus - Task Sending:** When CloudCode is running in Server Mode, you can use the mobile dashboard's **Send** action to launch a task instantly on your machine. This is the fast path: it uses recent defaults, starts a new background session, and takes you straight into the live terminal first. The **Logs** tab gives you the full transcript later if you want to review the session from the top.
+
+#### Send vs Create
+- **Send:** Best when speed matters and the recent agent/workspace defaults are good enough.
+- **Create:** Best when you want to choose the agent, workspace, title, or worktree before launch.
+- **Rule of thumb:** Send for “do this now,” create for “set this up carefully.”
 
 ### 3. Mid-Session Handoff (`cloudcode share`)
 This is the equivalent of the `/rc` command. Run this command inside any existing `tmux` session on your machine. It will communicate with the CloudCode backend and generate a pairing QR code for that specific session.

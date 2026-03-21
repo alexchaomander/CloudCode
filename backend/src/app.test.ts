@@ -20,6 +20,8 @@ vi.mock('./tmux/adapter.js', () => ({
   hasSession: vi.fn().mockResolvedValue(true),
   listSessions: vi.fn().mockResolvedValue([]),
   capturePane: vi.fn().mockResolvedValue('test output'),
+  capturePaneHistory: vi.fn().mockResolvedValue('history output'),
+  setHistoryLimit: vi.fn().mockResolvedValue(undefined),
   resizeWindow: vi.fn().mockResolvedValue(undefined),
 }));
 
