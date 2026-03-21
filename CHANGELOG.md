@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Mobile task dispatcher on the dashboard for fast task submission to local coding agents
+- Visible agent selection in the quick dispatch card so tasks can be routed to different agents intentionally
+- Full transcript reader with paginated history, scrollback loading, and timestamped session output
+- Session loading panel that appears immediately after launch so users see progress before terminal output arrives
+
+### Changed
+
+- Dashboard layout now prioritizes live sessions and reduces top-level copy for a cleaner mobile control surface
+- Quick dispatch now opens the live terminal first, while logs remain a secondary transcript view
+- Session details are tucked behind a `Details` action instead of competing with the primary live views
+- Mirror/live session UX now reflects CloudCode-managed sessions and uses `Live Sessions` terminology
+
+### Fixed
+
+- Transcript capture now starts at session creation time and avoids duplicate writes from websocket fallback paths
+- Repeated terminal redraw noise is deduplicated before it reaches the transcript reader
+- Logs now start from the beginning of a session by default instead of only showing the current terminal screen
+- Background transcript append failures are logged with session context instead of being swallowed silently
+
 ## [0.1.6] — 2026-03-18
 
 ### Fixed
