@@ -40,6 +40,7 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
   const wsRef = useRef<WebSocket | null>(null)
   const retryCountRef = useRef(0)
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pingWatchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
   const [isConnected, setIsConnected] = useState(false)
   const [bootState, setBootState] = useState<UseTerminalResult['bootState']>('loading-history')
@@ -97,6 +98,13 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
       clearTimeout(retryTimeoutRef.current)
       retryTimeoutRef.current = null
     }
+    // Clear the watchdog for the socket we're about to force-close. Without this,
+    // setting onclose=null (below) would prevent the normal onclose path from calling
+    // clearInterval, so the interval would leak and accumulate across reconnects.
+    if (pingWatchdogRef.current) {
+      clearInterval(pingWatchdogRef.current)
+      pingWatchdogRef.current = null
+    }
     const current = wsRef.current
     if (current) {
       current.onclose = null // suppress the normal close→backoff path
@@ -125,11 +133,21 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     const pingWatchdog = setInterval(() => {
       if (Date.now() - lastPingRef.current > CLIENT_PING_TIMEOUT_MS) {
         clearInterval(pingWatchdog)
+        if (pingWatchdogRef.current === pingWatchdog) pingWatchdogRef.current = null
         ws.close(1001, 'Ping watchdog timeout')
       }
     }, 5_000)
+    pingWatchdogRef.current = pingWatchdog
 
     ws.onopen = () => {
+      // Guard against stale sockets: if reconnectNow fired while this socket's
+      // handshake was in-flight, a newer socket has already taken wsRef.current.
+      // Silently close this one rather than corrupting shared state.
+      if (ws !== wsRef.current) {
+        clearInterval(pingWatchdog)
+        ws.close()
+        return
+      }
       if (!mountedRef.current) {
         clearInterval(pingWatchdog)
         ws.close()
@@ -213,7 +231,10 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
 
     ws.onclose = () => {
       clearInterval(pingWatchdog)
+      if (pingWatchdogRef.current === pingWatchdog) pingWatchdogRef.current = null
       if (!mountedRef.current) return
+      // Stale socket (displaced by reconnectNow + a new connect call): ignore.
+      if (ws !== wsRef.current) return
       setIsConnected(false)
       if (!hasRenderedContentRef.current) {
         setBootState('connecting')
@@ -295,6 +316,10 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     return () => {
       mountedRef.current = false
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+      if (pingWatchdogRef.current) {
+        clearInterval(pingWatchdogRef.current)
+        pingWatchdogRef.current = null
+      }
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
