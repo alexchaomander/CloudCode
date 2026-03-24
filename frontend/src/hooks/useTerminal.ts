@@ -32,6 +32,10 @@ function decodeBase64ToBytes(dataBase64: string): Uint8Array {
 const MAX_RETRIES = 10
 const BASE_DELAY_MS = 500
 
+// If the server sends no ping for this long, assume the connection is silently dead
+// (e.g. phone woke from sleep and the TCP socket wasn't cleaned up server-side yet).
+const CLIENT_PING_TIMEOUT_MS = 35_000
+
 export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTerminalResult {
   const wsRef = useRef<WebSocket | null>(null)
   const retryCountRef = useRef(0)
@@ -42,6 +46,8 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const pendingMessagesRef = useRef<string[]>([])
   const hasRenderedContentRef = useRef(false)
+  // Tracks last server ping time so we can detect silent connection death
+  const lastPingRef = useRef<number>(Date.now())
 
   const markReady = useCallback(() => {
     hasRenderedContentRef.current = true
@@ -83,6 +89,25 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     }
   }, [sessionId, terminal, markReady])
 
+  // Force-reconnect immediately, bypassing backoff. Used when we get a strong signal
+  // that the connection is dead (network change, visibility restore, ping timeout).
+  const reconnectNow = useCallback(() => {
+    if (!mountedRef.current) return
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+      retryTimeoutRef.current = null
+    }
+    const current = wsRef.current
+    if (current) {
+      current.onclose = null // suppress the normal close→backoff path
+      current.onerror = null
+      current.close()
+      wsRef.current = null
+    }
+    retryCountRef.current = 0
+    setIsConnected(false)
+  }, [])
+
   const connect = useCallback(() => {
     if (!mountedRef.current) return
 
@@ -93,12 +118,25 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     const ws = new WebSocket(url)
     wsRef.current = ws
 
+    // Watchdog: if no ping arrives from the server within CLIENT_PING_TIMEOUT_MS, the
+    // connection is silently dead (common after phone sleep or a WiFi→cellular switch).
+    // Close it immediately so the onclose handler kicks off a fresh reconnect.
+    lastPingRef.current = Date.now()
+    const pingWatchdog = setInterval(() => {
+      if (Date.now() - lastPingRef.current > CLIENT_PING_TIMEOUT_MS) {
+        clearInterval(pingWatchdog)
+        ws.close(1001, 'Ping watchdog timeout')
+      }
+    }, 5_000)
+
     ws.onopen = () => {
       if (!mountedRef.current) {
+        clearInterval(pingWatchdog)
         ws.close()
         return
       }
       retryCountRef.current = 0
+      lastPingRef.current = Date.now() // reset watchdog on fresh connect
       setIsConnected(true)
       setBootState(hasRenderedContentRef.current ? 'ready' : 'waiting-for-output')
 
@@ -127,9 +165,20 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
           status?: string
           error?: string
           message?: string
+          timestamp?: number
         }
 
         switch (msg.type) {
+          case 'ping':
+            // Respond to server heartbeat and reset the client-side watchdog.
+            // This is the mosh-inspired link health check: both ends actively verify
+            // the channel is alive so dead connections are detected in <20s rather
+            // than waiting for TCP timeout (which can take minutes).
+            lastPingRef.current = Date.now()
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong', timestamp: msg.timestamp }))
+            }
+            break
           case 'terminal.output':
             if (terminal && msg.dataBase64 !== undefined) {
               const bytes = decodeBase64ToBytes(msg.dataBase64)
@@ -163,6 +212,7 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     }
 
     ws.onclose = () => {
+      clearInterval(pingWatchdog)
       if (!mountedRef.current) return
       setIsConnected(false)
       if (!hasRenderedContentRef.current) {
@@ -188,23 +238,46 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     }
 
     ws.onerror = () => {
+      clearInterval(pingWatchdog)
       ws.close()
     }
   }, [sessionId, terminal])
 
-  // Handle visibility
+  // Handle visibility: when the page becomes visible after a sleep/background period,
+  // reconnect immediately. Also handles stuck CONNECTING sockets (common after wake).
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-          retryCountRef.current = 0
-          connect()
-        }
+      if (document.visibilityState !== 'visible') return
+      const ws = wsRef.current
+      const isDead = !ws
+        || ws.readyState === WebSocket.CLOSED
+        || ws.readyState === WebSocket.CLOSING
+      // CONNECTING sockets may be stuck after a sleep; if the last ping was long ago
+      // it's safer to kill and restart than to wait for the backoff chain.
+      const isStuckConnecting = ws?.readyState === WebSocket.CONNECTING
+        && Date.now() - lastPingRef.current > CLIENT_PING_TIMEOUT_MS
+      if (isDead || isStuckConnecting) {
+        reconnectNow()
+        connect()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [connect])
+  }, [connect, reconnectNow])
+
+  // Handle network changes: when the browser comes back online (WiFi↔cellular switch,
+  // or reconnecting after airplane mode) immediately try to reconnect rather than
+  // waiting for the exponential backoff queue to drain. This is the browser-accessible
+  // analog to mosh's roaming — we can't change IP-layer transport, but we can react
+  // to the network change event as fast as possible.
+  useEffect(() => {
+    const handleOnline = () => {
+      reconnectNow()
+      connect()
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [connect, reconnectNow])
 
   useEffect(() => {
     mountedRef.current = true
