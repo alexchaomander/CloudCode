@@ -51,3 +51,16 @@ CloudCode uses a "Zero-Password" pairing system:
 2. It embeds this token into a QR code.
 3. When you scan the QR code, the remote device is instantly authenticated and granted a 30-day session cookie.
 4. No need to type passwords or manage SSH keys on your mobile device.
+
+## Connection Resilience on Mobile
+
+Pairing gets you connected — but mobile networks are inherently unstable. CloudCode is designed to stay live through the disruptions that are normal on a phone:
+
+| Scenario | What happens |
+|---|---|
+| Phone screen locks / sleeps | Server detects the silent socket within 15 s via heartbeat; client detects it within 35 s via ping watchdog. Both sides clean up and the next wake triggers an instant reconnect. |
+| Wi-Fi → cellular (or back) | Browser fires the `online` event the moment a new interface is ready. CloudCode immediately opens a fresh WebSocket — no waiting for the backoff queue. |
+| Brief signal loss | Existing exponential backoff (up to 10 retries, capped at 30 s) handles transient drops. |
+| Page becomes visible after background | Visibility handler checks for closed *and* stuck-CONNECTING sockets, terminates them, and reconnects before you can tap anything. |
+
+The agent itself is never affected by any of these events — it continues running in its `tmux` session regardless. The resilience work is entirely about getting your phone's view back to the live session as fast as possible.

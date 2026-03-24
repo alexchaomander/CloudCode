@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Visible agent selection in the quick dispatch card so tasks can be routed to different agents intentionally
 - Full transcript reader with paginated history, scrollback loading, and timestamped session output
 - Session loading panel that appears immediately after launch so users see progress before terminal output arrives
+- **Connection heartbeat:** server sends a `ping` every 15 seconds and closes the socket if no `pong` arrives — dead connections are now detected in under 20 seconds instead of waiting for TCP timeout
+- **Client-side ping watchdog:** client force-closes and reconnects if no server ping is received for 35 seconds, catching the case where the TCP socket is silently stale (common after phone sleep with an expired NAT entry)
+- **Network-aware reconnect:** listening on the browser `online` event immediately cancels any pending backoff timer and opens a fresh WebSocket when the device changes networks (Wi-Fi↔cellular switch, airplane mode off, etc.)
+- **Improved visibility reconnect:** page-visibility handler now detects sockets stuck in `CONNECTING` state — a wake-from-sleep artifact — and replaces them immediately rather than waiting for the connection attempt to time out
 
 ### Changed
 
