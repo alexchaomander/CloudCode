@@ -150,6 +150,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     let heartbeatAlive = true;
     const heartbeatTimer = setInterval(() => {
       if (!heartbeatAlive) {
+        cleanupHeartbeat();
         ws.close(1001, 'Ping timeout');
         return;
       }
@@ -178,6 +179,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'session.error',
         message: 'Authentication required',
       }));
+      cleanupHeartbeat();
       ws.close(1008, 'Unauthorized');
       return;
     }
