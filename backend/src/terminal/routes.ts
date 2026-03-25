@@ -132,7 +132,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/ws/terminal', { websocket: true }, (connection: any, request) => {
     // In @fastify/websocket v11, connection might be the socket itself or contain a socket
     const ws = connection.socket || connection;
-    
+
     if (!ws || typeof ws.send !== 'function') {
       fastify.log.error({ connection: !!connection }, 'Invalid WebSocket connection object');
       return;
@@ -141,6 +141,26 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     let attachedSession: ReturnType<typeof getSession> | null = null;
     let attachPromise: Promise<void> | null = null;
     let lastSize = { cols: 80, rows: 24 };
+
+    // Heartbeat: detect silent/dead connections (e.g. phone sleep, network change).
+    // Server pings every 15s; if no pong arrives before the next ping, the connection
+    // is considered dead and closed. This mirrors mosh's approach of actively probing
+    // the client-to-server link rather than waiting for TCP to eventually time out.
+    const HEARTBEAT_INTERVAL_MS = 15_000;
+    let heartbeatAlive = true;
+    const heartbeatTimer = setInterval(() => {
+      if (!heartbeatAlive) {
+        cleanupHeartbeat();
+        ws.close(1001, 'Ping timeout');
+        return;
+      }
+      heartbeatAlive = false;
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    const cleanupHeartbeat = () => clearInterval(heartbeatTimer);
 
     const cookieToken = request.cookies?.['session'];
     const queryToken = (request.query as Record<string, string>)['token'];
@@ -159,6 +179,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'session.error',
         message: 'Authentication required',
       }));
+      cleanupHeartbeat();
       ws.close(1008, 'Unauthorized');
       return;
     }
@@ -242,6 +263,11 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
               break;
             }
 
+            case 'pong': {
+              heartbeatAlive = true;
+              break;
+            }
+
             case 'terminal.input': {
               if (!ptySession && attachPromise) {
                 await attachPromise;
@@ -295,12 +321,14 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     ws.on('close', () => {
+      cleanupHeartbeat();
       void ptySession?.close().catch(() => {});
       ptySession = null;
       attachedSession = null;
     });
 
     ws.on('error', () => {
+      cleanupHeartbeat();
       void ptySession?.close().catch(() => {});
       ptySession = null;
       attachedSession = null;

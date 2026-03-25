@@ -19,6 +19,7 @@ Start an agent on your laptop, walk away, and check in from your phone or tablet
 - **Transcript logs:** Shows the full session output in a scrollable, timestamped transcript view.
 - **QR code pairing:** Scan a QR code from your terminal to authenticate your phone. No passwords or SSH keys.
 - **Persistent sessions:** Sessions run inside `tmux`. Your agent keeps working if your laptop sleeps or your connection drops. Reconnect and pick up where you left off.
+- **Resilient connection:** A server-side heartbeat and client-side watchdog detect dead connections in under 20 seconds. The browser's network-change event triggers an immediate reconnect when you switch between Wi-Fi and cellular — no waiting for backoff timers to drain.
 - **Flexible networking:** Works on local Wi-Fi, over Tailscale (private network), or via Cloudflare Tunnels (no port-forwarding needed).
 - **Git worktree isolation:** Run agents in isolated `git worktrees` to keep your working directory clean.
 
@@ -157,6 +158,9 @@ CloudCode uses a small Go-based sidecar to interface with UNIX pseudo-terminals 
 
 **What happens if my laptop goes to sleep while an agent is running?**
 The agent keeps running. Sessions are managed by `tmux`, which is independent of CloudCode's web server. Your agent's process continues as long as the machine is powered on. When you reconnect, CloudCode picks the session back up.
+
+**What happens to my phone's connection when it sleeps or switches networks?**
+CloudCode's connection layer is designed for exactly this. A server-side heartbeat ping detects that your phone's WebSocket is gone within 15 seconds rather than waiting for TCP's multi-minute timeout. On the client side, the browser's `online` event fires the moment a new network interface is ready (e.g. after a Wi-Fi→cellular switch), triggering an immediate reconnect without cycling through an exponential backoff queue. In practice, the terminal is back live within a few seconds of your phone waking up or changing networks.
 
 **Can I run multiple agents at the same time?**
 Yes. Each session is an independent `tmux` window. You can run as many concurrent sessions as your machine can handle and manage them all from the dashboard.
