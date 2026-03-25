@@ -63,7 +63,7 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
   const fitAddonRef = useRef<FitAddon | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const [terminalInstance, setTerminalInstance] = useState<XTerm | null>(null)
-  const { isConnected, bootState, sendInput, resize } = useTerminal({ sessionId, terminal: terminalInstance })
+  const { isConnected, bootState, sessionEnded, sendInput, resize } = useTerminal({ sessionId, terminal: terminalInstance })
 
   const [ctrlMode, setCtrlMode] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -693,8 +693,8 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
                   title="Scroll to bottom"
                 >END</button>
               </div>
-              <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{isConnected ? 'Live' : 'Syncing'}</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${sessionEnded ? 'bg-zinc-500' : isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{sessionEnded ? 'Ended' : isConnected ? 'Live' : 'Syncing'}</span>
             </div>
           </div>
 
@@ -728,7 +728,7 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
                     <div className="h-1.5 w-2/5 animate-[pulse_1.6s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-300 via-white to-cyan-300" />
                   </div>
                   <div className="mt-4 flex items-center justify-between text-[11px] text-zinc-500">
-                    <span>{isConnected ? 'Stream attached' : 'Connecting...'}</span>
+                    <span>{sessionEnded ? 'Session ended' : isConnected ? 'Stream attached' : 'Connecting...'}</span>
                     <span>Session {sessionId.slice(0, 8)}</span>
                   </div>
                 </div>

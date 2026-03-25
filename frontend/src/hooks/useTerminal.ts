@@ -10,6 +10,7 @@ export interface UseTerminalOptions {
 export interface UseTerminalResult {
   isConnected: boolean
   bootState: 'loading-history' | 'connecting' | 'waiting-for-output' | 'ready'
+  sessionEnded: boolean
   sendInput: (data: string) => void
   resize: (cols: number, rows: number) => void
 }
@@ -44,6 +45,7 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
   const mountedRef = useRef(true)
   const [isConnected, setIsConnected] = useState(false)
   const [bootState, setBootState] = useState<UseTerminalResult['bootState']>('loading-history')
+  const [sessionEnded, setSessionEnded] = useState(false)
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const pendingMessagesRef = useRef<string[]>([])
   const hasRenderedContentRef = useRef(false)
@@ -212,6 +214,13 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
             }
             break
           case 'session.status':
+            // The backend sends this when the PTY exits (status: 'stopped') or when
+            // a session transitions to an error state. Update UI immediately so the
+            // terminal header shows "Ended" rather than staying on "Live".
+            if (msg.status === 'stopped' || msg.status === 'error') {
+              setSessionEnded(true)
+              setIsConnected(false)
+            }
             break
           case 'session.error':
             if (terminal) {
@@ -291,19 +300,45 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
   // waiting for the exponential backoff queue to drain. This is the browser-accessible
   // analog to mosh's roaming — we can't change IP-layer transport, but we can react
   // to the network change event as fast as possible.
+  //
+  // Guards:
+  // • OPEN check — skip if we already have a healthy connection; some mobile browsers
+  //   fire `online` even when the socket is still alive (e.g. switching back to a
+  //   known Wi-Fi network while LTE stays up briefly).
+  // • Debounce (200 ms) — some OS/browser combos emit multiple `online` events in
+  //   rapid succession during a single network transition. Without debouncing each
+  //   event would tear down and re-create the socket, producing a burst of in-flight
+  //   connections that the stale-socket guard would then have to clean up.
   useEffect(() => {
+    let onlineDebounceTimer: ReturnType<typeof setTimeout> | null = null
     const handleOnline = () => {
-      reconnectNow()
-      connect()
+      if (wsRef.current?.readyState === WebSocket.OPEN) return
+      if (onlineDebounceTimer) clearTimeout(onlineDebounceTimer)
+      onlineDebounceTimer = setTimeout(() => {
+        onlineDebounceTimer = null
+        reconnectNow()
+        connect()
+      }, 200)
+    }
+    // When the network goes away, update the UI immediately rather than waiting
+    // up to 35 s for the watchdog or 20 s for the server heartbeat to notice.
+    const handleOffline = () => {
+      setIsConnected(false)
     }
     window.addEventListener('online', handleOnline)
-    return () => window.removeEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      if (onlineDebounceTimer) clearTimeout(onlineDebounceTimer)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
   }, [connect, reconnectNow])
 
   useEffect(() => {
     mountedRef.current = true
     hasRenderedContentRef.current = false
     setBootState('loading-history')
+    setSessionEnded(false)
     if (terminal) {
       terminal.write('\x1bc')
       void loadBootstrap().finally(() => {
@@ -327,5 +362,5 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     }
   }, [sessionId, terminal, connect, loadBootstrap])
 
-  return { isConnected, bootState, sendInput, resize }
+  return { isConnected, bootState, sessionEnded, sendInput, resize }
 }
