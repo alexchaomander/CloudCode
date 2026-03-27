@@ -198,14 +198,16 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
       await ptySession?.close().catch(() => {});
       attachedSession = session;
       ptySession = await sidecarManager.openStream(tmuxSessionName, lastSize.cols, lastSize.rows, {
-        onOutput: ({ text, dataBase64 }) => {
+        onData: (dataBase64) => {
+          if (ws.readyState !== 1) return;
+          ws.send(JSON.stringify({ type: 'terminal.output', dataBase64 }));
+        },
+        onText: (text) => {
           if (session && !isMirrorOnly && !hasTranscriptRecorder(session.id)) {
             void appendTranscript(session.id, text).catch((err) => {
               console.error(`[terminal] Failed to append transcript for session ${session.id}:`, err)
             })
           }
-          if (ws.readyState !== 1) return;
-          ws.send(JSON.stringify({ type: 'terminal.output', dataBase64 }));
         },
         onExit: () => {
           if (ws.readyState !== 1) return;

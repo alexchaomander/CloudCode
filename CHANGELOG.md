@@ -8,6 +8,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-03-27
+
+### Added
+
+- **CLI Power-User Features**: New terminal-native commands for managing sessions directly from the workstation:
+  - `cloudcode status`: List all active sessions with agent, path, and uptime.
+  - `cloudcode attach <id>`: Instantly re-enter any session's native `tmux` environment.
+  - `cloudcode logs <id>`: Stream clean semantic Markdown logs to the terminal. Use `-f` to follow live.
+  - `cloudcode stop <id>`: Gracefully terminate an active agent session with SIGINT.
+  - `cloudcode init`: New diagnostic tool to verify dependencies (Node, Go, tmux, git) and auto-detect installed agents.
+
+### Improved
+
+- **Bit-Perfect PTY Streaming**: Refactored the backend bridge to decouple raw binary data from decoded text. The live terminal now receives a bit-perfect stream, eliminating dropped or corrupted multi-byte characters (emojis, complex symbols).
+- **Enhanced Transcript Preservation**: Refined the Markdown transcript filters to preserve agent reasoning states like "Thinking," "Analyzing," and "Working," providing a more comprehensive history of the agent's thought process.
+- **Robust Agent Detection**: The `init` command now uses multiple detection strategies (version check + `command -v`) to find installed agents even if they don't support standard version flags.
+
+### Fixed
+
+- **PTY Bridge Stability**: Wrapped decoding logic in robust error handlers to prevent malformed PTY data from crashing the session line-processor.
+- **CLI SQL Safety**: All new terminal commands use strictly parameterized queries to prevent SQL injection.
+- **Log Follow Cleanup**: The `cloudcode logs -f` command now correctly cleans up intervals and event listeners on exit.
+
 ## [0.1.8] — 2026-03-25
 
 ### Added

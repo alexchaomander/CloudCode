@@ -34,7 +34,8 @@ type SidecarResponse = {
 };
 
 export interface SidecarStreamListener {
-  onOutput: (chunk: { text: string; dataBase64: string }) => void;
+  onData: (dataBase64: string) => void;
+  onText: (text: string) => void;
   onExit: (exitCode: number) => void;
   onError: (message: string) => void;
 }
@@ -180,20 +181,29 @@ class SidecarManager {
         break;
       case 'output':
         if (message.data) {
-          const decoded = record.decoder.write(Buffer.from(message.data, 'base64'));
-          if (decoded) {
-            record.listener.onOutput({ text: decoded, dataBase64: message.data });
+          // 1. Always send raw data immediately to ensure live terminal is bit-perfect
+          record.listener.onData(message.data);
+
+          // 2. Process text for transcripts (handling UTF-8 boundaries)
+          try {
+            const decoded = record.decoder.write(Buffer.from(message.data, 'base64'));
+            if (decoded) {
+              record.listener.onText(decoded);
+            }
+          } catch (err) {
+            console.error(`[sidecar] PTY Decode Error for stream ${streamId}:`, err);
           }
         }
         break;
       case 'exit':
         {
-          const trailing = record.decoder.end();
-          if (trailing) {
-            record.listener.onOutput({
-              text: trailing,
-              dataBase64: Buffer.from(trailing, 'utf8').toString('base64'),
-            });
+          try {
+            const trailing = record.decoder.end();
+            if (trailing) {
+              record.listener.onText(trailing);
+            }
+          } catch (err) {
+            console.error(`[sidecar] PTY Flush Error on exit for stream ${streamId}:`, err);
           }
         }
         record.listener.onExit(message.exitCode ?? 0);
@@ -201,12 +211,13 @@ class SidecarManager {
         break;
       case 'error': {
         {
-          const trailing = record.decoder.end();
-          if (trailing) {
-            record.listener.onOutput({
-              text: trailing,
-              dataBase64: Buffer.from(trailing, 'utf8').toString('base64'),
-            });
+          try {
+            const trailing = record.decoder.end();
+            if (trailing) {
+              record.listener.onText(trailing);
+            }
+          } catch (err) {
+            console.error(`[sidecar] PTY Flush Error on error for stream ${streamId}:`, err);
           }
         }
         const error = new Error(message.message ?? 'PTY sidecar error');

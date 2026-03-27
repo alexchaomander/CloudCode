@@ -28,23 +28,25 @@ function isUiChromeLine(line: string): boolean {
   const trimmed = line.trim()
   if (!trimmed) return false
 
-  if (trimmed.includes('cc-') || trimmed.includes('projects/')) return true
+  // Technical escape sequences or internal UI identifiers
   if (trimmed.includes(';2c0;276;0c')) return true
   if (trimmed.includes('[?12l') || trimmed.includes('[?25h') || trimmed.includes('[>c')) return true
-  if (trimmed.includes('to accept edits')) return true
+
+  // NEVER strip lines that look like Markdown structural elements (lists, headers, etc)
+  if (isMarkdownStructuralLine(trimmed)) return false
 
   const lowered = trimmed.toLowerCase()
+  
+  // Headers and repetitive status bars that aren't useful in a static transcript
   const chrome = [
-    'gemini cli', 'claude code', 'logged in', 'openai codex', 'copilot cli',
-    '/auth', '/upgrade', 'type your message', 'shift+tab', 'shortcuts',
-    'analyzing', 'thinking', 'working', 'completed', 'no sandbox', '/model',
-    'delegate to agent', 'subagent', 'termination reason', 'goal', 'result:'
+    'shift+tab', 'shortcuts', 'no sandbox'
   ]
 
   if (chrome.some((needle) => lowered.includes(needle))) return true
 
-  if (/^[0-9. ]+$/.test(trimmed) && (trimmed.includes('.') || trimmed.length < 5)) return true
-  if (trimmed.length < 3 && !/^[A-Z0-9]+$/.test(trimmed)) return true
+  // Hide standalone progress percentages or short numeric noise (e.g. " 10.5% ") 
+  // but ONLY if they aren't part of a Markdown structure.
+  if (/^[0-9.% ]+$/.test(trimmed) && trimmed.length < 8) return true
 
   return false
 }

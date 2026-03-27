@@ -69,19 +69,10 @@ cloudcode run gemini-cli --rc
 npm install -g @humans-of-ai/cloudcode
 ```
 
-Verify the install:
+Verify the install and check your system for dependencies:
 
 ```bash
-cloudcode --version
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/alexchaomander/CloudCode.git
-cd CloudCode
-npm install
-npm run install:cli
+cloudcode init
 ```
 
 ---
@@ -99,6 +90,18 @@ Starts the agent in a `tmux` session, attaches your terminal, and prints a QR co
 cloudcode start --rc
 ```
 Runs CloudCode as a background server so you can launch agents later from your phone.
+
+---
+
+## CLI Power-User Features
+
+Beyond the dashboard, you can manage your sessions directly from the terminal:
+
+- **`cloudcode status`**: List all active sessions, their agents, and uptime.
+- **`cloudcode attach <id>`**: Directly attach to a session's native `tmux` environment.
+- **`cloudcode logs <id>`**: Stream clean semantic transcripts (Markdown) of a session. Use `-f` to follow live.
+- **`cloudcode stop <id>`**: Gracefully stop an active agent session.
+- **`cloudcode init`**: Verify your environment (Node, Go, tmux, git) and detect installed agents.
 
 ### Share an existing session
 ```bash
