@@ -16,6 +16,7 @@ import { syncSessionStatus, createSession } from './sessions/service.js';
 import { sidecarManager } from './terminal/sidecar-manager.js';
 import { db } from './db/index.js';
 import { startTunnel, stopTunnel } from './utils/tunnel.js';
+import { readTranscript } from './terminal/transcript-store.js';
 
 const program = new Command();
 
@@ -55,6 +56,210 @@ async function startServer(options: { port: number; host: string; sidecarSocketP
   await app.listen({ port: options.port, host: options.host });
   return app;
 }
+
+program
+  .command('init')
+  .description('Check dependencies and initialize CloudCode environment')
+  .action(async () => {
+    console.log(chalk.blue.bold('\n🔍 CloudCode System Check\n'));
+
+    const checkDep = (name: string, cmd: string) => {
+      try {
+        const version = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        console.log(`${chalk.green('✅')} ${chalk.bold(name.padEnd(10))} Found (${chalk.dim(version.split('\n')[0])})`);
+        return true;
+      } catch {
+        console.log(`${chalk.red('❌')} ${chalk.bold(name.padEnd(10))} Not found`);
+        return false;
+      }
+    };
+
+    const deps = [
+      { name: 'Node.js', cmd: 'node --version' },
+      { name: 'Go', cmd: 'go version' },
+      { name: 'tmux', cmd: 'tmux -V' },
+      { name: 'git', cmd: 'git --version' },
+    ];
+
+    let allDepsFound = true;
+    for (const dep of deps) {
+      if (!checkDep(dep.name, dep.cmd)) allDepsFound = false;
+    }
+
+    if (!allDepsFound) {
+      console.log(chalk.yellow('\n⚠️  Some dependencies are missing. Please install them to ensure CloudCode works correctly.'));
+    }
+
+    console.log(chalk.blue.bold('\n🤖 Agent Detection\n'));
+    const agents = [
+      { name: 'Claude Code', cmd: 'claude --version', slug: 'claude-code' },
+      { name: 'Gemini CLI', cmd: 'gemini --version', slug: 'gemini-cli' },
+      { name: 'Copilot', cmd: 'copilot version', slug: 'github-copilot' },
+    ];
+
+    for (const agent of agents) {
+      try {
+        // Try running the version command
+        execSync(agent.cmd, { stdio: 'ignore' });
+        console.log(`${chalk.green('✅')} ${chalk.bold(agent.name.padEnd(12))} Detected`);
+      } catch {
+        // Fallback: check if the binary exists in PATH at all
+        try {
+          const binaryName = agent.cmd.split(' ')[0];
+          execSync(`command -v ${binaryName}`, { stdio: 'ignore' });
+          console.log(`${chalk.green('✅')} ${chalk.bold(agent.name.padEnd(12))} Detected (Binary found)`);
+        } catch {
+          console.log(`${chalk.gray('➖')} ${chalk.dim(agent.name.padEnd(12))} Not detected`);
+        }
+      }
+    }
+
+    runMigrations();
+    const admin = getFirstAdminUser();
+    if (!admin) {
+      console.log(chalk.yellow('\n👤 No admin user found.'));
+      console.log(chalk.dim('   Run "cloudcode run <agent>" or "cloudcode start" to create your first user.'));
+    } else {
+      console.log(chalk.green(`\n✅ Admin user "${admin.username}" is ready.`));
+    }
+
+    console.log(chalk.blue.bold('\n🌐 Networking Check\n'));
+    try {
+      execSync('tailscale version', { stdio: 'ignore' });
+      console.log(`${chalk.green('✅')} ${chalk.bold('Tailscale')}   Detected (Recommended for secure remote access)`);
+    } catch {
+      console.log(`${chalk.yellow('ℹ️')} ${chalk.bold('Tailscale')}   Not detected (Optional)`);
+    }
+
+    console.log(chalk.cyan('\n✨ Initialization complete!'));
+    console.log(chalk.gray('Use ') + chalk.white('cloudcode run claude-code --rc') + chalk.gray(' to start your first session.\n'));
+  });
+
+program
+  .command('status')
+  .description('Show status of active CloudCode sessions')
+  .action(async () => {
+    runMigrations();
+    await syncSessionStatus();
+    
+    const sessions = db.prepare(`
+      SELECT s.*, p.name as profile_name 
+      FROM sessions s 
+      JOIN agent_profiles p ON p.id = s.agent_profile_id 
+      WHERE s.status = 'running'
+      ORDER BY s.created_at DESC
+    `).all() as any[];
+
+    if (sessions.length === 0) {
+      console.log(chalk.gray('\nNo active sessions.'));
+      return;
+    }
+
+    console.log(chalk.blue.bold(`\n🚀 Active CloudCode Sessions (${sessions.length}):\n`));
+    sessions.forEach(s => {
+      const uptime = Math.floor((Date.now() - new Date(s.started_at).getTime()) / 60000);
+      console.log(`${chalk.green('●')} ${chalk.bold(s.title)} [${chalk.cyan(s.public_id)}]`);
+      console.log(`  ${chalk.dim('Agent:')} ${s.profile_name}`);
+      console.log(`  ${chalk.dim('Path :')} ${s.workdir}`);
+      console.log(`  ${chalk.dim('Uptime:')} ${uptime}m\n`);
+    });
+  });
+
+program
+  .command('attach')
+  .description('Attach to a session via tmux')
+  .argument('<id>', 'Public ID of the session (e.g. 5x7h2k9)')
+  .action(async (id: string) => {
+    runMigrations();
+    const session = db.prepare('SELECT tmux_session_name FROM sessions WHERE public_id = ?').get(id) as { tmux_session_name: string } | undefined;
+    
+    if (!session) {
+      console.error(chalk.red(`Error: Session "${id}" not found.`));
+      process.exit(1);
+    }
+
+    console.log(chalk.yellow(`Attaching to session ${id}... (Ctrl-b d to detach)`));
+    try {
+      spawn('tmux', ['attach-session', '-t', session.tmux_session_name], {
+        stdio: 'inherit'
+      }).on('exit', () => {
+        process.exit(0);
+      });
+    } catch (err) {
+      console.error(chalk.red('Failed to attach:'), err);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('stop')
+  .description('Stop an active session')
+  .argument('<id>', 'Public ID of the session')
+  .action(async (id: string) => {
+    runMigrations();
+    const session = db.prepare('SELECT id, public_id, title FROM sessions WHERE public_id = ?').get(id) as { id: string; public_id: string; title: string } | undefined;
+    
+    if (!session) {
+      console.error(chalk.red(`Error: Session "${id}" not found.`));
+      process.exit(1);
+    }
+
+    const admin = getFirstAdminUser();
+    if (!admin) {
+      console.error(chalk.red('Error: Admin user not found.'));
+      process.exit(1);
+    }
+
+    console.log(chalk.yellow(`Stopping session "${session.title}" [${session.public_id}]...`));
+    try {
+      const { stopSession } = await import('./sessions/service.js');
+      await stopSession(session.id, admin.id);
+      console.log(chalk.green('✅ Session stopped.'));
+    } catch (err) {
+      console.error(chalk.red('Failed to stop session:'), err);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('logs')
+  .description('Show clean semantic logs for a session')
+  .argument('<id>', 'Public ID of the session')
+  .option('-f, --follow', 'Follow log output', false)
+  .action(async (id: string, options: { follow: boolean }) => {
+    runMigrations();
+    const session = db.prepare('SELECT id, title FROM sessions WHERE public_id = ?').get(id) as { id: string; title: string } | undefined;
+    
+    if (!session) {
+      console.error(chalk.red(`Error: Session "${id}" not found.`));
+      process.exit(1);
+    }
+
+    const printLogs = async () => {
+      try {
+        const logs = await readTranscript(session.id, { asMarkdown: true });
+        process.stdout.write('\x1b[H\x1b[2J'); // Clear screen
+        console.log(chalk.blue.bold(`📝 Transcript for: ${session.title} [${id}]\n`));
+        console.log(logs || chalk.dim('(Empty)'));
+        if (options.follow) {
+          console.log(chalk.yellow('\nWatching for changes... (Ctrl+C to stop)'));
+        }
+      } catch (err) {
+        console.error(chalk.red('\nFailed to read transcript:'), err);
+        if (!options.follow) process.exit(1);
+      }
+    };
+
+    await printLogs();
+
+    if (options.follow) {
+      const interval = setInterval(printLogs, 2000);
+      process.on('SIGINT', () => {
+        clearInterval(interval);
+        process.exit(0);
+      });
+    }
+  });
 
 program
   .command('start')

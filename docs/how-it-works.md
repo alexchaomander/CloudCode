@@ -15,7 +15,7 @@ Standard mobile keyboards are missing critical developer keys (`Ctrl`, `Esc`, `T
 *   **Custom Keybar**: CloudCode provides a thumb-friendly bar for these modifiers.
 *   **Control Mode**: Tapping `CTRL` opens a specialized overlay grid, making complex shortcuts like `Ctrl+C` or `Ctrl+Z` effortless on a touchscreen.
 *   **Haptic Feedback**: Every keypress provides a subtle vibration, making the virtual terminal feel tactile and responsive.
-*   **Live PTY Stream**: CloudCode uses a dedicated PTY sidecar to attach to tmux and stream raw terminal bytes to the browser, preserving interactive terminal behavior with scrollback and fewer rendering artifacts.
+*   **Bit-Perfect PTY Stream**: CloudCode uses a dedicated PTY sidecar to attach to tmux. The stream is decoupled: raw binary bytes are forwarded immediately to the browser for a bit-perfect live view, while a parallel processor handles UTF-8 decoding and semantic filtering for the transcript. This ensures no characters (like emojis or symbols) are dropped or corrupted.
 
 ### 3. Connection Resilience
 
@@ -54,5 +54,5 @@ Because agents are powerful, CloudCode prioritizes transparency:
 ### Summary Flow
 1.  **Workstation**: Runs the CloudCode backend, SQLite DB, and tmux.
 2.  **Tailscale**: Securely tunnels your phone to your workstation.
-3.  **Phone**: Accesses the CloudCode PWA to launch, monitor, and interact with agents via a live PTY stream backed by tmux sessions.
+3.  **Phone / Terminal**: Accesses the CloudCode PWA or uses the `cloudcode` CLI to launch, monitor, and interact with agents via a bit-perfect PTY stream backed by tmux sessions.
 4.  **Resilience layer**: Server heartbeat + client watchdog + network-event listener ensure the WebSocket reconnects within seconds of any network disruption — phone sleep, Wi-Fi↔cellular switch, or brief signal loss.

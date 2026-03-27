@@ -22,10 +22,10 @@
 npm install -g @humans-of-ai/cloudcode
 ```
 
-Verify the install:
+Verify the install and check your system for dependencies:
 
 ```bash
-cloudcode --version
+cloudcode init
 ```
 
 Then run first-time setup:
