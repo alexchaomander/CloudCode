@@ -1,6 +1,6 @@
 {
   "name": "cloudcode",
-  "version": "0.1.0",
+  "version": "0.1.9",
   "description": "Self-hosted, mobile-first web interface for managing local CLI-based coding agents over Tailscale",
   "license": "MIT",
   "repository": {
