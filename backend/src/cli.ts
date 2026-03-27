@@ -9,6 +9,7 @@ import { join } from 'path';
 import { tmpdir, networkInterfaces } from 'os';
 import { randomBytes } from 'crypto';
 import { nanoid } from 'nanoid';
+import { writeFileSync } from 'fs';
 import { buildApp } from './index.js';
 import { runMigrations } from './db/migrations.js';
 import { getFirstAdminUser, createPairingToken, hashPassword, createUser } from './auth/service.js';
@@ -258,6 +259,116 @@ program
         clearInterval(interval);
         process.exit(0);
       });
+    }
+  });
+
+program
+  .command('summary')
+  .description('Generate a summary of a session using a local AI agent')
+  .argument('<id>', 'Public ID of the session to summarize')
+  .option('--agent <slug>', 'Agent profile slug to use (e.g. claude-code)', 'claude-code')
+  .action(async (id: string, options: { agent: string }) => {
+    runMigrations();
+    
+    // 1. Fetch Session
+    const session = db.prepare('SELECT id, title, workdir FROM sessions WHERE public_id = ?').get(id) as { id: string; title: string; workdir: string } | undefined;
+    if (!session) {
+      console.error(chalk.red(`Error: Session "${id}" not found.`));
+      process.exit(1);
+    }
+
+    // 2. Fetch Agent
+    const profile = db.prepare('SELECT * FROM agent_profiles WHERE slug = ?').get(options.agent) as any;
+    if (!profile) {
+      console.error(chalk.red(`Error: Agent profile "${options.agent}" not found.`));
+      process.exit(1);
+    }
+
+    console.log(chalk.blue(`\n📝 Generating summary for: ${session.title} [${id}]`));
+    console.log(chalk.dim(`Using agent: ${profile.name}`));
+
+    // 3. Get Transcript
+    let transcript = '';
+    try {
+      transcript = await readTranscript(session.id, { asMarkdown: true });
+    } catch (err) {
+      console.error(chalk.red('Failed to read transcript.'), err);
+      process.exit(1);
+    }
+
+    if (!transcript || transcript.trim().length === 0) {
+      console.log(chalk.yellow('Transcript is empty. Nothing to summarize.'));
+      process.exit(0);
+    }
+
+    // 4. Create Temp File
+    const tmpPromptPath = join(tmpdir(), `cc-summary-${id}-${Date.now()}.md`);
+    const prompt = `Summarize the following coding session transcript. Focus on:
+1. The primary goal or issue being addressed.
+2. The architectural decisions made.
+3. The specific files changed.
+4. The final outcome or status.
+
+--- TRANSCRIPT ---
+${transcript}
+`;
+    try {
+      writeFileSync(tmpPromptPath, prompt, 'utf8');
+    } catch (err) {
+      console.error(chalk.red('Failed to write temporary prompt file.'), err);
+      process.exit(1);
+    }
+
+    // 5. Execution Strategy
+    const tmuxSessionName = `cc-summary-${nanoid(6)}`;
+    const args = JSON.parse(profile.args_json) as string[];
+    const env = JSON.parse(profile.env_json) as Record<string, string>;
+
+    try {
+      // Import tmux adapter dynamically or if already imported, use it
+      const tmux = await import('./tmux/adapter.js');
+      
+      await tmux.createSession(
+        tmuxSessionName,
+        profile.command,
+        args,
+        session.workdir || process.cwd(),
+        Object.keys(env).length > 0 ? env : undefined
+      );
+
+      // Wait a moment for the agent to boot up
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Instruct the agent to read the file
+      // Different agents have different ways to read files. 
+      // For Claude Code and Gemini CLI, usually just asking them to read the absolute path works.
+      const readCommand = `Please read the file at ${tmpPromptPath} and provide the summary.`;
+      
+      await tmux.sendLiteralText(tmuxSessionName, readCommand);
+      await tmux.sendEnter(tmuxSessionName);
+
+      console.log(chalk.green(`\n✅ Summary agent launched.`));
+      console.log(chalk.yellow(`Attaching to session... (Type /exit, Ctrl-D, or Ctrl-b d to leave when finished)\n`));
+
+      // Attach to show output
+      const child = spawn('tmux', ['attach-session', '-t', tmuxSessionName], {
+        stdio: 'inherit'
+      });
+
+      child.on('exit', () => {
+        console.log(chalk.gray(`\nDetached from summary session.`));
+        // Cleanup temp file
+        try {
+          // fs.unlinkSync(tmpPromptPath); 
+          // Leaving it might be useful if they want to see what was sent, but better to clean up.
+          import('fs').then(fs => fs.unlinkSync(tmpPromptPath)).catch(() => {});
+        } catch {}
+        process.exit(0);
+      });
+
+    } catch (err) {
+      console.error(chalk.red('Failed to run summary session:'), err);
+      process.exit(1);
     }
   });
 
