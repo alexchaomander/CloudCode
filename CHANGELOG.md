@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Agent Reflection (`cloudcode summary`)**: A new CLI command that pipes the semantic transcript of a past session into a local AI agent (like Claude or Gemini). It automatically spins up a hidden tmux session, injects the transcript as context, and prompts the agent to summarize the architectural decisions and files changed—perfect for generating PR descriptions from your mobile pairing sessions.
 - **CLI Power-User Features**: New terminal-native commands for managing sessions directly from the workstation:
   - `cloudcode status`: List all active sessions with agent, path, and uptime.
   - `cloudcode attach <id>`: Instantly re-enter any session's native `tmux` environment.
@@ -27,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Transcript Store Deduplication**: Resolved a regression where terminal redraws were not being correctly deduplicated in the history view.
 - **PTY Bridge Stability**: Wrapped decoding logic in robust error handlers to prevent malformed PTY data from crashing the session line-processor.
 - **CLI SQL Safety**: All new terminal commands use strictly parameterized queries to prevent SQL injection.
 - **Log Follow Cleanup**: The `cloudcode logs -f` command now correctly cleans up intervals and event listeners on exit.
