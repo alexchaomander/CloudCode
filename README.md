@@ -100,6 +100,7 @@ Beyond the dashboard, you can manage your sessions directly from the terminal:
 - **`cloudcode status`**: List all active sessions, their agents, and uptime.
 - **`cloudcode attach <id>`**: Directly attach to a session's native `tmux` environment.
 - **`cloudcode logs <id>`**: Stream clean semantic transcripts (Markdown) of a session. Use `-f` to follow live.
+- **`cloudcode summary <id>`**: Automatically spin up a local agent to read the transcript and summarize the session for you (great for PR descriptions!).
 - **`cloudcode stop <id>`**: Gracefully stop an active agent session.
 - **`cloudcode init`**: Verify your environment (Node, Go, tmux, git) and detect installed agents.
 
