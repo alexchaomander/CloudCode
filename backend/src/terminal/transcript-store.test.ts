@@ -90,8 +90,8 @@ describe('buildTranscriptPage', () => {
 
     expect(page.totalItems).toBe(2);
     expect(page.items.map((item) => item.text)).toEqual([
-      'Status: running',
-      'Status: done',
+      'Status: running Working on task',
+      'Status: done Working on task',
     ]);
   });
 });

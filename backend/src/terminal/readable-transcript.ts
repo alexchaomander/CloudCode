@@ -24,13 +24,16 @@ function normalizeLine(line: string): string {
     .replace(/\r/g, '')
 }
 
-function isUiChromeLine(line: string): boolean {
+export function isUiChromeLine(line: string): boolean {
   const trimmed = line.trim()
   if (!trimmed) return false
 
   // Technical escape sequences or internal UI identifiers
   if (trimmed.includes(';2c0;276;0c')) return true
   if (trimmed.includes('[?12l') || trimmed.includes('[?25h') || trimmed.includes('[>c')) return true
+  
+  // Project path noise and internal IDs
+  if (trimmed.includes('cc-') || trimmed.includes('projects/')) return true
 
   // NEVER strip lines that look like Markdown structural elements (lists, headers, etc)
   if (isMarkdownStructuralLine(trimmed)) return false

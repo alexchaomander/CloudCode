@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatReadableTranscript } from './readable-transcript.js';
+import { formatReadableTranscript, isUiChromeLine } from './readable-transcript.js';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'data', 'transcripts');
 const EVENT_FILE_SUFFIX = '.events.jsonl';
@@ -132,31 +132,6 @@ function normalizeTranscriptLine(line: string): string {
 
 function isMostlySymbolLine(line: string): boolean {
   return /^[\W_]+$/.test(line) && !/[A-Za-z0-9]/.test(line);
-}
-
-function isUiChromeLine(line: string): boolean {
-  const trimmed = line.trim();
-  if (!trimmed) return false;
-
-  if (trimmed.includes('cc-') || trimmed.includes('projects/')) return true;
-  if (trimmed.includes(';2c0;276;0c')) return true;
-  if (trimmed.includes('[?12l') || trimmed.includes('[?25h') || trimmed.includes('[>c')) return true;
-  if (trimmed.includes('to accept edits')) return true;
-
-  const lowered = trimmed.toLowerCase();
-  const chrome = [
-    'gemini cli', 'claude code', 'logged in', 'openai codex', 'copilot cli',
-    '/auth', '/upgrade', 'type your message', 'shift+tab', 'shortcuts',
-    'analyzing', 'thinking', 'working', 'completed', 'no sandbox', '/model',
-    'delegate to agent', 'subagent', 'termination reason', 'goal', 'result:',
-  ];
-
-  if (chrome.some((needle) => lowered.includes(needle))) return true;
-
-  if (/^[0-9. ]+$/.test(trimmed) && (trimmed.includes('.') || trimmed.length < 5)) return true;
-  if (trimmed.length < 3 && !/^[A-Z0-9]+$/.test(trimmed)) return true;
-
-  return false;
 }
 
 function buildTranscriptFingerprint(text: string): string {
