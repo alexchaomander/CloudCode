@@ -9,7 +9,7 @@ import { join } from 'path';
 import { tmpdir, networkInterfaces } from 'os';
 import { randomBytes } from 'crypto';
 import { nanoid } from 'nanoid';
-import { writeFileSync } from 'fs';
+import { writeFileSync, chmodSync } from 'fs';
 import { buildApp } from './index.js';
 import { runMigrations } from './db/migrations.js';
 import { getFirstAdminUser, createPairingToken, hashPassword, createUser } from './auth/service.js';
@@ -312,8 +312,10 @@ program
 --- TRANSCRIPT ---
 ${transcript}
 `;
+
     try {
       writeFileSync(tmpPromptPath, prompt, 'utf8');
+      chmodSync(tmpPromptPath, 0o600); // Only owner can read/write
     } catch (err) {
       console.error(chalk.red('Failed to write temporary prompt file.'), err);
       process.exit(1);
