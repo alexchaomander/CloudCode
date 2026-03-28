@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Updates the @humans-of-ai/cloudcode version pin inside packages/cloudcode/package.json
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,12 +9,55 @@ if (!version) {
   process.exit(1);
 }
 
-const shimPkgPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..', '..', 'packages', 'cloudcode', 'package.json'
-);
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const pkg = JSON.parse(readFileSync(shimPkgPath, 'utf8'));
-pkg.dependencies['@humans-of-ai/cloudcode'] = version;
-writeFileSync(shimPkgPath, JSON.stringify(pkg, null, 2) + '\n');
-console.log(`Updated @humans-of-ai/cloudcode → ${version} in cloudcode shim`);
+function updateJson(relPath, updateFn) {
+  const filePath = join(repoRoot, relPath);
+  if (!existsSync(filePath)) {
+    return false;
+  }
+
+  const json = JSON.parse(readFileSync(filePath, 'utf8'));
+  updateFn(json);
+  writeFileSync(filePath, JSON.stringify(json, null, 2) + '\n');
+  return true;
+}
+
+const updated = [];
+
+for (const relPath of ['package.json', 'backend/package.json', 'frontend/package.json']) {
+  const changed = updateJson(relPath, (pkg) => {
+    pkg.version = version;
+  });
+
+  if (changed) {
+    updated.push(relPath);
+  }
+}
+
+const lockfileChanged = updateJson('package-lock.json', (lockfile) => {
+  lockfile.version = version;
+
+  if (lockfile.packages?.['']) {
+    lockfile.packages[''].version = version;
+  }
+
+  if (lockfile.packages?.backend) {
+    lockfile.packages.backend.version = version;
+  }
+
+  if (lockfile.packages?.frontend) {
+    lockfile.packages.frontend.version = version;
+  }
+});
+
+if (lockfileChanged) {
+  updated.push('package-lock.json');
+}
+
+if (updated.length === 0) {
+  console.error('No release metadata files found to update.');
+  process.exit(1);
+}
+
+console.log(`Updated release version to ${version} in: ${updated.join(', ')}`);

@@ -8,8 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Added
-- **Agent Reflection (`cloudcode summary`)**: A new CLI command that pipes the semantic transcript of a past session into a local AI agent (like Claude or Gemini). It automatically spins up a hidden tmux session, injects the transcript as context, and prompts the agent to summarize the architectural decisions and files changed—perfect for generating PR descriptions from your mobile pairing sessions.
+## [0.1.10] — 2026-03-28
+
+### Fixed
+
+- **Reliable npm packaging**: `npm pack` and `npm publish` now build the backend CLI, bundled frontend assets, and cross-platform PTY sidecars automatically during `prepack`, so the published tarball always includes `dist/cli.js` and the required runtime files.
+- **Version alignment**: Root, backend, and frontend package metadata now ship as `0.1.10`, avoiding workspace version drift during releases.
+
+### Improved
+
+- **Release automation**: The tag-driven release workflow now syncs all workspace versions from the tag and publishes GitHub release notes directly from the matching `CHANGELOG.md` entry, keeping npm and GitHub releases consistent.
 
 ## [0.1.9] — 2026-03-27
 
