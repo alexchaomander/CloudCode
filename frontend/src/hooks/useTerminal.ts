@@ -7,10 +7,28 @@ export interface UseTerminalOptions {
   terminal: Terminal | null
 }
 
+export interface PromptState {
+  isActive: boolean
+  type: 'yesno' | 'enter' | null
+  text?: string
+}
+
+export interface TimelineAction {
+  id: string
+  type: 'bash' | 'read' | 'edit' | 'grep' | 'ls' | 'custom'
+  label: string
+  status: 'running' | 'completed' | 'error'
+  content?: string
+  startTime: string
+  endTime?: string
+}
+
 export interface UseTerminalResult {
   isConnected: boolean
   bootState: 'loading-history' | 'connecting' | 'waiting-for-output' | 'ready'
   sessionEnded: boolean
+  promptState: PromptState | null
+  timelineActions: TimelineAction[]
   sendInput: (data: string) => void
   resize: (cols: number, rows: number) => void
 }
@@ -46,6 +64,8 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
   const [isConnected, setIsConnected] = useState(false)
   const [bootState, setBootState] = useState<UseTerminalResult['bootState']>('loading-history')
   const [sessionEnded, setSessionEnded] = useState(false)
+  const [promptState, setPromptState] = useState<PromptState | null>(null)
+  const [timelineActions, setTimelineActions] = useState<TimelineAction[]>([])
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const pendingMessagesRef = useRef<string[]>([])
   const hasRenderedContentRef = useRef(false)
@@ -230,6 +250,22 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
               }
             }
             break
+          case 'prompt.state':
+            setPromptState((msg as any).promptState as PromptState)
+            break
+          case 'timeline.action': {
+            const action = (msg as any).action as TimelineAction
+            setTimelineActions(prev => {
+              const exists = prev.findIndex(a => a.id === action.id)
+              if (exists !== -1) {
+                const next = [...prev]
+                next[exists] = action
+                return next
+              }
+              return [...prev, action]
+            })
+            break
+          }
           default:
             break
         }
@@ -339,6 +375,8 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     hasRenderedContentRef.current = false
     setBootState('loading-history')
     setSessionEnded(false)
+    setPromptState(null)
+    setTimelineActions([])
     if (terminal) {
       terminal.write('\x1bc')
       void loadBootstrap().finally(() => {
@@ -362,5 +400,5 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
     }
   }, [sessionId, terminal, connect, loadBootstrap])
 
-  return { isConnected, bootState, sessionEnded, sendInput, resize }
+  return { isConnected, bootState, sessionEnded, promptState, timelineActions, sendInput, resize }
 }
