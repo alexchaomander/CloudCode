@@ -15,7 +15,9 @@ Start an agent on your laptop, walk away, and check in from your phone or tablet
 ## Why CloudCode?
 
 - **Agent agnostic:** Works with Claude Code, Gemini CLI, OpenAI Codex, GitHub Copilot CLI, or any CLI tool.
-- **Task launch:** Start tasks instantly from your mobile dashboard without opening a full terminal. CloudCode defaults to your recent projects and drops you into the live session view.
+- **Smart Remote Control:** Detects agent activity and transforms it into a **Task Timeline** of collapsible cards.
+- **Instant Approvals:** Automatically pops up native **Approval Modals** when an agent requests permission, saving you from opening the mobile keyboard.
+- **Task launch:** Start tasks instantly from your mobile dashboard without opening a full terminal.
 - **Transcript logs:** Shows the full session output in a scrollable, timestamped transcript view.
 - **QR code pairing:** Scan a QR code from your terminal to authenticate your phone. No passwords or SSH keys.
 - **Persistent sessions:** Sessions run inside `tmux`. Your agent keeps working if your laptop sleeps or your connection drops. Reconnect and pick up where you left off.
