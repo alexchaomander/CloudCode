@@ -3,8 +3,10 @@ import { useParams, useNavigate, useLocation, useSearchParams } from 'react-rout
 import { Session } from '../types'
 import { Terminal } from '../components/Terminal'
 import { apiFetch } from '../hooks/useApi'
+import { ActionTimeline } from '../components/ActionTimeline'
+import { TimelineAction } from '../hooks/useTerminal'
 
-type Tab = 'terminal' | 'logs'
+type Tab = 'terminal' | 'logs' | 'timeline'
 
 interface TranscriptPageItem {
   index: number
@@ -103,11 +105,12 @@ export function SessionDetail() {
   const isMirrorMode = !!sessionName
   const navigate = useNavigate()
   const tabParam = searchParams.get('tab') as Tab | null
-  const initialTab: Tab = tabParam === 'logs' || tabParam === 'terminal'
+  const initialTab: Tab = tabParam === 'logs' || tabParam === 'terminal' || tabParam === 'timeline'
     ? tabParam
     : (launchState?.activeTab ?? 'terminal')
 
   const [activeTab, setActiveTab] = useState<Tab>(isMirrorMode && initialTab === 'logs' ? 'terminal' : initialTab)
+  const [timelineActions, setTimelineActions] = useState<TimelineAction[]>([])
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -647,8 +650,10 @@ export function SessionDetail() {
 
   const tabs: { id: Tab; label: string }[] = isMirrorMode ? [
     { id: 'terminal', label: 'Terminal' },
+    { id: 'timeline', label: 'Timeline' },
   ] : [
     { id: 'terminal', label: 'Terminal' },
+    { id: 'timeline', label: 'Timeline' },
     { id: 'logs', label: 'Logs' },
   ]
 
@@ -778,9 +783,20 @@ export function SessionDetail() {
               sessionId={session.publicId}
               sessionTitle={session.title}
               agentName={session.agentProfile?.name ?? 'agent'}
+              onTimelineActions={setTimelineActions}
             />
           </div>
         </div>
+
+        {activeTab === 'timeline' && (
+          <div className="h-full flex flex-col bg-black animate-fade-in overflow-y-auto">
+            <div className="px-3 py-2.5 border-b border-zinc-800 bg-zinc-950/95 flex items-center justify-between gap-3 sm:px-4 sticky top-0 z-10">
+              <h3 className="text-[11px] font-bold text-indigo-400 uppercase tracking-[0.2em]">Action Timeline</h3>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{timelineActions.length} events</span>
+            </div>
+            <ActionTimeline actions={timelineActions} />
+          </div>
+        )}
 
         {activeTab === 'logs' && (
           <div className="h-full flex flex-col bg-black animate-fade-in">
