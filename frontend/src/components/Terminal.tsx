@@ -3,7 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
-import { useTerminal } from '../hooks/useTerminal'
+import { TimelineAction, useTerminal } from '../hooks/useTerminal'
 import { apiFetch } from '../hooks/useApi'
 import '@xterm/xterm/css/xterm.css'
 
@@ -11,6 +11,7 @@ interface TerminalProps {
   sessionId: string
   sessionTitle?: string
   agentName?: string
+  onTimelineActions?: (actions: TimelineAction[]) => void
 }
 
 const XTERM_THEME = {
@@ -57,13 +58,17 @@ const FONT_SIZE_DEFAULT = window.innerWidth < 768 ? 14 : 13
 // True when phone is in landscape (tablets excluded via max-height)
 const LANDSCAPE_MQ = '(orientation: landscape) and (max-height: 500px)'
 
-export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) {
+export function Terminal({ sessionId, sessionTitle, agentName, onTimelineActions }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const [terminalInstance, setTerminalInstance] = useState<XTerm | null>(null)
-  const { isConnected, bootState, sessionEnded, sendInput, resize } = useTerminal({ sessionId, terminal: terminalInstance })
+  const { isConnected, bootState, sessionEnded, promptState, timelineActions, sendInput, resize } = useTerminal({ sessionId, terminal: terminalInstance })
+
+  useEffect(() => {
+    onTimelineActions?.(timelineActions)
+  }, [timelineActions, onTimelineActions])
 
   const [ctrlMode, setCtrlMode] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -589,6 +594,49 @@ export function Terminal({ sessionId, sessionTitle, agentName }: TerminalProps) 
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 select-none overflow-hidden relative">
+      {/* Smart Prompt Overlay */}
+      {promptState?.isActive && (
+        <div className="absolute inset-x-0 bottom-24 z-50 p-4 animate-slide-up flex justify-center pointer-events-none">
+          <div className="bg-zinc-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-3xl shadow-2xl p-5 max-w-md w-full pointer-events-auto">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-tight">Agent Action Required</h3>
+                <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">{promptState.text}</p>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              {promptState.type === 'yesno' ? (
+                <>
+                  <button
+                    onClick={() => { haptic(); sendInput('y\r'); }}
+                    className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all tap-feedback shadow-lg shadow-indigo-600/20"
+                  >
+                    Approve (Y)
+                  </button>
+                  <button
+                    onClick={() => { haptic(); sendInput('n\r'); }}
+                    className="flex-1 py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-xl transition-all tap-feedback"
+                  >
+                    Deny (N)
+                  </button>
+                </>
+              ) : promptState.type === 'enter' ? (
+                <button
+                  onClick={() => { haptic(); sendInput('\r'); }}
+                  className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all tap-feedback shadow-lg shadow-indigo-600/20"
+                >
+                  Continue (Enter)
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search Bar Overlay */}
       {showSearch && (
         <div className="absolute top-0 inset-x-0 z-50 p-2 animate-fade-in bg-zinc-900/90 backdrop-blur-md border-b border-white/5 flex items-center gap-2">
