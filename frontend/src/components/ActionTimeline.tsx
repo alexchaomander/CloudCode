@@ -35,7 +35,7 @@ export function ActionTimeline({ actions }: ActionTimelineProps) {
             onClick={() => setExpandedId(expandedId === action.id ? null : action.id)}
             className="w-full text-left p-4 flex items-center gap-3"
           >
-            <ActionIcon type={action.type} status={action.status} />
+            <ActionIcon type={action.type} />
             
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
@@ -81,7 +81,7 @@ export function ActionTimeline({ actions }: ActionTimelineProps) {
   )
 }
 
-function ActionIcon({ type, status }: { type: TimelineAction['type'], status: TimelineAction['status'] }) {
+function ActionIcon({ type }: { type: TimelineAction['type'] }) {
   const baseClasses = "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border"
   
   const styles = {

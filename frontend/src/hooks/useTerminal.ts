@@ -262,7 +262,10 @@ export function useTerminal({ sessionId, terminal }: UseTerminalOptions): UseTer
                 next[exists] = action
                 return next
               }
-              return [...prev, action]
+              // Cap at 100 actions to prevent memory growth in long sessions
+              const MAX_TIMELINE_ACTIONS = 100
+              const updated = [...prev, action]
+              return updated.length > MAX_TIMELINE_ACTIONS ? updated.slice(-MAX_TIMELINE_ACTIONS) : updated
             })
             break
           }
