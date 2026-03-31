@@ -3,6 +3,7 @@ import { getSession, getSessionByPublicId, hasTranscriptRecorder } from '../sess
 import { validateSession } from '../auth/service.js';
 import { sidecarManager, type SidecarStreamHandle } from './sidecar-manager.js';
 import * as tmux from '../tmux/adapter.js';
+import { HeuristicsEngine } from './heuristics.js';
 import {
   appendTranscript,
   appendTranscriptResize,
@@ -141,6 +142,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
     let attachedSession: ReturnType<typeof getSession> | null = null;
     let attachPromise: Promise<void> | null = null;
     let lastSize = { cols: 80, rows: 24 };
+    const heuristics = new HeuristicsEngine();
 
     // Heartbeat: detect silent/dead connections (e.g. phone sleep, network change).
     // Server pings every 15s; if no pong arrives before the next ping, the connection
@@ -201,6 +203,14 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
         onData: (dataBase64) => {
           if (ws.readyState !== 1) return;
           ws.send(JSON.stringify({ type: 'terminal.output', dataBase64 }));
+          
+          const result = heuristics.process(dataBase64);
+          if (result.prompt) {
+            ws.send(JSON.stringify({ type: 'prompt.state', promptState: result.prompt }));
+          }
+          if (result.action) {
+            ws.send(JSON.stringify({ type: 'timeline.action', action: result.action }));
+          }
         },
         onText: (text) => {
           if (session && !isMirrorOnly && !hasTranscriptRecorder(session.id)) {
@@ -324,6 +334,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
 
     ws.on('close', () => {
       cleanupHeartbeat();
+      heuristics.dispose();
       void ptySession?.close().catch(() => {});
       ptySession = null;
       attachedSession = null;
@@ -331,6 +342,7 @@ const terminalRoutes: FastifyPluginAsync = async (fastify) => {
 
     ws.on('error', () => {
       cleanupHeartbeat();
+      heuristics.dispose();
       void ptySession?.close().catch(() => {});
       ptySession = null;
       attachedSession = null;
